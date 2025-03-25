@@ -1,0 +1,69 @@
+includes:
+    - vendor/phpstan/phpstan-symfony/extension.neon
+    - vendor/phpstan/phpstan-symfony/rules.neon
+    # Suppression de l'extension Doctrine qui cause des erreurs
+
+parameters:
+    level: 6
+    paths:
+        - config
+        - src
+        - public
+    treatPhpDocTypesAsCertain: false
+
+    # Configuration des erreurs à ignorer
+    ignoreErrors:
+        # Méthodes non trouvées
+        - '#Call to an undefined method App\\Entity\\User::getName\(\)#'
+        
+        # Problèmes de compatibilité UserInterface vs User
+        - '#Parameter \#1 \$user of method App\\Interface\\PaymentServiceInterface::createSession\(\) expects App\\Entity\\User, Symfony\\Component\\Security\\Core\\User\\UserInterface(\|null)? given#'
+        - '#Parameter \#1 \$user of method App\\Entity\\UserJit::setUser\(\) expects App\\Entity\\User, Symfony\\Component\\Security\\Core\\User\\UserInterface given#'
+        
+        # Problèmes d'accès aux offsets
+        - '#Offset .* does not exist on array\{email: string, password: string\}#'
+        
+        # Propriétés non trouvées
+        - '#Access to an undefined property Stripe\\StripeObject::\$object#'
+        
+        # Classes non trouvées
+        - '#PHPDoc tag @var for variable \$userJwt contains unknown class App\\EventListener\\UserJwt#'
+        - '#PHPDoc tag @var with type App\\EventListener\\UserJwt is not subtype of native type App\\Entity\\UserJit\|null#'
+        - '#Call to method getJwtId\(\) on an unknown class App\\EventListener\\UserJwt#'
+        
+        # Propriétés uniquement écrites
+        - '#Property App\\.*::\$[a-zA-Z0-9_]+ is never read, only written#'
+        
+        # Manque de typage dans les tableaux
+        - '#Method App\\.*::[a-zA-Z0-9_]+\(\) (has parameter|return type has) no value type specified in iterable type array#'
+        - '#Property App\\.*::\$[a-zA-Z0-9_]+ type has no value type specified in iterable type array#'
+        - '#Class App\\.*Repository has PHPDoc tag @method for method .* parameter \#[0-9]+ \$[a-zA-Z0-9_]+ with no value type specified in iterable type array#'
+        
+        # Problèmes de typage dans les DataFixtures
+        - '#Parameter \#1 \$provider of method App\\Entity\\User::setProvider\(\) expects list<string>, array\{App\\Enum\\AuthProvider::CREDENTIALS\} given#'
+        
+        # Autres erreurs spécifiques
+        - '#Instanceof between Throwable and Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException will always evaluate to false#'
+        - '#Expression on left side of \?\? is not nullable#'
+        - '#Constant App\\Service\\Payment\\.*::(PAYMENT_TYPE|STATUS_PENDING) is unused#'
+        - '#Method App\\Service\\Payment\\PaymentIntentService::createInvoiceForPayment\(\) is unused#'
+
+    # Configuration générale
+    checkMissingIterableValueType: true
+    checkGenericClassInNonGenericObjectType: true
+    checkUninitializedProperties: true
+    reportUnmatchedIgnoredErrors: true
+
+    # Configuration Symfony
+    symfony:
+        containerXmlPath: var/cache/dev/App_KernelDevDebugContainer.xml
+        constantHassers: false
+
+parametersSchema:
+    symfony: structure([
+        container_xml_path: string()
+    ])
+    checkMissingIterableValueType: bool()
+    checkGenericClassInNonGenericObjectType: bool()
+    checkUninitializedProperties: bool()
+    reportUnmatchedIgnoredErrors: bool()

@@ -1,0 +1,311 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  CI_REGISTRY_IMAGE: ghcr.io/${{ secrets.actor }}/boilerplate-symfony-frankenphp-simple
+
+jobs:
+  build-app:
+    name: Build Application
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, gd, bcmath, zip, intl, redis, xsl, amqp, xdebug
+
+      - name: Copy Environment Files
+        run: cp .env.example .env
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y git libnss3-tools
+          composer install --optimize-autoloader
+          # Note : Cette commande installe aussi bien les dépendances de prod que celles de dev
+
+      - name: Upload Composer Dependencies as Artifact
+        uses: actions/upload-artifact@v4.6.0
+        with:
+          name: composer-dependencies
+          path: vendor/
+          retention-days: 1
+
+      - name: Build Application
+        run: |
+          php bin/console cache:warmup
+          mkdir -p build
+          # Ajoutez ici d'autres commandes de build si nécessaire
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4.6.0
+        with:
+          name: build-artifact
+          path: |
+            build/
+            var/cache/
+          retention-days: 1
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: [build-app]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: symfony
+          POSTGRES_PASSWORD: symfony
+          POSTGRES_DB: symfony_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:latest
+        options: --health-cmd "redis-cli ping"
+      mailhog:
+        image: mailhog/mailhog
+        ports:
+          - 1025:1025
+          - 8025:8025
+    env:
+      APP_ENV: test
+      APP_SECRET: '$ecretf0rt3st'
+      # Correction importante : la base de données doit correspondre à celle du service postgres
+      DATABASE_URL: postgresql://symfony:symfony@localhost:5432/symfony_test
+      JWT_SECRET_KEY: '%kernel.project_dir%/config/jwt/private.pem'
+      JWT_PUBLIC_KEY: '%kernel.project_dir%/config/jwt/public.pem'
+      JWT_PASSPHRASE: 'a1b2c3d4e5!@#$%^'
+      MAILER_DSN: smtp://mailhog:1025
+      MAILER_SENDER_ADDRESS: no-reply@example.com
+      TOKEN_TTL: 3600
+      APP_OTP_ENABLED: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, gd, bcmath, zip, intl, redis, xsl, amqp, xdebug
+
+      - name: Download Composer Dependencies Artifact
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: composer-dependencies
+          path: vendor/
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: build-artifact
+          path: .
+
+      - name: Copy Environment Files
+        run: cp .env.example .env && cp phpunit.xml.dist phpunit.xml
+
+      - name: Generate JWT Key Pair
+        run: php bin/console lexik:jwt:generate-keypair --overwrite
+
+      - name: Setup Database
+        run: |
+          php bin/console doctrine:database:drop --if-exists --force --env=test
+          php bin/console doctrine:database:create --env=test
+          php bin/console doctrine:migrations:migrate --no-interaction --env=test
+
+      - name: Rendre pest exécutable
+        run: chmod +x ./vendor/bin/pest
+
+      - name: Run Tests
+        run: ./vendor/bin/pest
+
+  # build-base:
+  #   name: Build Base Image
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+  #     - name: Log in to GitHub Container Registry
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: ghcr.io
+  #         username: ${{ secrets.ACTOR }}
+  #         password: ${{ secrets.PAT_TOKEN }}
+  #     - name: Build and push base image
+  #       uses: docker/build-push-action@v6
+  #       with:
+  #         context: .
+  #         target: base
+  #         tags: ${{ env.CI_REGISTRY_IMAGE }}:base
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
+  #         push: true
+  #         build-args: |
+  #           ENVIRONMENT=dev
+  #           SERVER_NAME=:80
+  #           USE_S6_OVERLAY=true
+  #           ENABLE_WORKER=false
+
+  # build-deps:
+  #   name: Build Dependencies Image
+  #   runs-on: ubuntu-latest
+  #   needs: build-base
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+  #     - name: Log in to GitHub Container Registry
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: ghcr.io
+  #         username: ${{ secrets.ACTOR }}
+  #         password: ${{ secrets.PAT_TOKEN }}
+  #     - name: Build and push deps image
+  #       uses: docker/build-push-action@v6
+  #       with:
+  #         context: .
+  #         target: builder
+  #         tags: ${{ env.CI_REGISTRY_IMAGE }}:deps
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
+  #         push: true
+  #         build-args: |
+  #           ENVIRONMENT=dev
+  #           SERVER_NAME=:80
+  #           USE_S6_OVERLAY=true
+  #           ENABLE_WORKER=false
+
+  # build-final:
+  #   name: Build Final Image
+  #   runs-on: ubuntu-latest
+  #   needs: [build-deps]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+  #     - name: Log in to GitHub Container Registry
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: ghcr.io
+  #         username: ${{ secrets.ACTOR }}
+  #         password: ${{ secrets.PAT_TOKEN }}
+  #     - name: Build and push final image
+  #       uses: docker/build-push-action@v6
+  #       with:
+  #         context: .
+  #         target: final
+  #         tags: |
+  #           ${{ env.CI_REGISTRY_IMAGE }}:${{ github.sha }}
+  #           ${{ env.CI_REGISTRY_IMAGE }}:latest
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
+  #         push: true
+  #         build-args: |
+  #           ENVIRONMENT=dev
+  #           SERVER_NAME=:80
+  #           USE_S6_OVERLAY=true
+  #           ENABLE_WORKER=false
+  #     # - name: Run container and clear cache
+  #     #   run: |
+  #     #     docker run --rm ${{ env.CI_REGISTRY_IMAGE }}:latest php bin/console cache:clear
+
+  # ansible-deploy:
+  #   name: Deploy with Ansible
+  #   runs-on: ubuntu-latest
+  #   needs: [build-final] # Ce job dépend du build-final
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     # Installer Ansible
+  #     # - name: Install Ansible
+  #     #   run: |
+  #     #     sudo apt update
+  #     #     sudo apt install -y ansible
+
+  #     # Configurer SSH pour Ansible
+  #     - name: Set up SSH for Ansible
+  #       env:
+  #         SSH_KEY: ${{ secrets.ANSIBLE_HOST_KEY }}
+  #         ANSIBLE_HOST: ${{ secrets.ANSIBLE_HOST }}
+  #       run: |
+  #         mkdir -p ~/.ssh
+  #         echo "$SSH_KEY" | tr -d '\r' > ~/.ssh/ansible_key
+  #         chmod 600 ~/.ssh/ansible_key
+  #         ssh-keyscan -H "$ANSIBLE_HOST" >> ~/.ssh/known_hosts
+
+  #     - name: Check SSH Configuration
+  #       run: |
+  #         ls -la ~/.ssh
+  #         cat ~/.ssh/ansible_key
+  #         ssh -i ~/.ssh/ansible_key kev_aubree_gmail_com@${{ secrets.ANSIBLE_HOST }} echo "SSH connection successful"
+
+  #     # Exécuter le playbook Ansible
+  #     # - name: Run Ansible Playbook
+  #     #   env:
+  #     #     GITHUB_ACTOR: ${{ secrets.ACTOR }}
+  #     #     GITHUB_PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+  #     #   run: |
+  #     #     ansible-playbook -i ./deploy/inventory.ini ./deploy/deploy.yml \
+  #     #       --extra-vars "github_username=${{ secrets.ACTOR }} github_actor=${{ secrets.ACTOR }} github_pat_token=${{ secrets.PAT_TOKEN }}"
+
+  #     - name: Run Deployment Script on Remote Server
+  #       env:
+  #         GITHUB_USERNAME: ${{ secrets.ACTOR }}
+  #         GITHUB_PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+  #       run: |
+  #         ssh -i ~/.ssh/ansible_key -o StrictHostKeyChecking=no \
+  #         kev_aubree_gmail_com@${{ secrets.ANSIBLE_HOST }} \
+  #         GITHUB_USERNAME=${{ secrets.ACTOR }} \
+  #         GITHUB_PAT_TOKEN=${{ secrets.PAT_TOKEN }} \
+  #         'bash -s' << 'EOF'
+  #           #!/bin/bash
+
+  #           # Variables pour le déploiement
+  #           DOCKER_IMAGE="ghcr.io/${GITHUB_USERNAME}/boilerplate-symfony-frankenphp-simple:latest"
+  #           CONTAINER_NAME="symfony_app"
+
+  #           # Arrêter tout service sur le port 80
+  #           if lsof -i:80 -t; then
+  #               sudo fuser -k 80/tcp
+  #           fi
+
+  #           # Connexion au registre GitHub Container
+  #           echo "${GITHUB_PAT_TOKEN}" | docker login ghcr.io -u "${GITHUB_USERNAME}" --password-stdin
+
+  #           # Supprimer l'ancienne image Docker
+  #           docker rmi -f "${DOCKER_IMAGE}" || true
+
+  #           # Puller la nouvelle image Docker
+  #           docker pull "${DOCKER_IMAGE}"
+
+  #           # Arrêter et supprimer l'ancien conteneur
+  #           docker rm -f "${CONTAINER_NAME}" || true
+
+  #           # Démarrer le nouveau conteneur
+  #           docker run -d --name "${CONTAINER_NAME}" --restart always -p 80:80 -e APP_ENV=dev -e USE_S6_OVERLAY=true "${DOCKER_IMAGE}"
+
+  #           # Copier le fichier .env dans le conteneur
+  #           docker cp /opt/symfony-app/.env "${CONTAINER_NAME}:/app/.env"
+
+  #           # Supprimer les conteneurs non utilisés de type <none>
+  #           docker rmi $(docker images -f "dangling=true" -q) || true
+
+  #           # Vérifier que le conteneur est lancé
+  #           docker ps | grep "${CONTAINER_NAME}"
+  #         EOF

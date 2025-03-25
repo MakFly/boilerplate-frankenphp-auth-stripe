@@ -1,0 +1,73 @@
+---
+description: you are a expert developer php symfony with certification. Use good practices php , pest on symfony
+globs: *.php
+---
+You are an expert in Symfony, PHP, and related web development technologies.
+
+## Key Principles
+- Write concise, technical responses with accurate PHP examples.
+- Adhere to Symfony 6+ best practices and conventions.
+- Use object-oriented programming with a focus on SOLID principles.
+- Prefer iteration and modularization over duplication.
+- Use descriptive variable and method names.
+- Follow recommended directory structures (e.g., `src/Controller`, `src/Service`).
+- Favor dependency injection and the Symfony service container.
+
+---
+
+## PHP/Symfony
+- Use Symfony 7.0+
+- Use PHP 8.2+ features when appropriate (e.g., typed properties, match expressions).
+- Follow PSR-12 coding standards.
+- Use strict typing: `declare(strict_types=1);`
+- Utilize Symfony’s built-in components and helpers when possible.
+- File structure: Follow Symfony’s standard directory layout (e.g., `src/`, `config/`, `templates/`).
+- Implement proper error handling and logging:
+  - Use Symfony’s exception handling and Monolog for logging.
+  - Create custom exceptions when necessary.
+  - Use try-catch blocks for expected exceptions.
+- Use Symfony’s Validator component for request/form validation.
+- Use #[MapRequestPayload] for request validation.
+- I use docker for development.
+- Leverage the HttpKernel middleware (or event listeners/subscribers) for request filtering and modification.
+- Utilize Doctrine ORM for database interactions (or other supported data layers).
+- Use Doctrine’s query builder for complex database queries.
+- Implement proper database migrations using Doctrine Migrations.
+
+### Dependencies
+- **Symfony** (latest stable version)
+- **Composer** for dependency management
+
+---
+
+## Symfony Best Practices
+- Use Doctrine ORM instead of raw SQL queries when possible.
+- Implement the Repository pattern (or rely on Doctrine repositories) for data access.
+- Use Symfony’s built-in Security component for authentication and authorization.
+- Utilize Symfony’s caching mechanisms for improved performance (e.g., Cache component, reverse proxy caching).
+- Use the Messenger component for long-running tasks or asynchronous processing.
+- Leverage PHPUnit (or Pest) for unit and integration tests within Symfony’s testing framework.
+- Implement API versioning for public APIs (e.g., distinct routes, subdomains, or custom headers).
+- Use Symfony’s Translation component for multi-language support.
+- Implement proper CSRF protection using Symfony’s security tokens.
+- Use Webpack Encore (or other build tools) for asset compilation.
+- Ensure proper database indexing for improved query performance.
+- Use Symfony’s pagination solutions (e.g., Pagerfanta) for paginated data.
+- Implement robust error logging and monitoring (e.g., Monolog, Sentry).
+- The tests are in the tests/Feature folder or tests/Unit folder.
+- The tests are using Pest.
+- The tests 
+
+---
+
+## Key Conventions
+1. Follow Symfony’s MVC architecture (controllers in `src/Controller`, domain logic in services, entities in `src/Entity`).
+2. Use Symfony’s Routing component (YAML, XML, attributes) for defining application endpoints.
+3. Implement proper request validation using the Validator component or Symfony Forms.
+4. Use the Twig templating engine for views and templates.
+5. Define database relationships using Doctrine’s annotations or attributes (OneToMany, ManyToMany, etc.).
+6. Leverage Symfony’s built-in authentication scaffolding (Security component and guards).
+7. Implement proper API resource transformations using Symfony’s Serializer component.
+8. Use Symfony’s event dispatcher and subscriber system for decoupled code.
+9. Employ database transactions via Doctrine’s `EntityManagerInterface` for data integrity.
+10. Use Symfony’s Console commands and cron jobs (or Scheduler component, if available) for recurring tasks.

@@ -1,0 +1,27 @@
+
+###> symfony/framework-bundle ###
+/.env.local
+/.env.test
+/.env.test.local
+/.env
+/.env.local.php
+/.env.*.local
+/config/secrets/prod/prod.decrypt.private.php
+/public/bundles/
+/var/
+/vendor/
+###< symfony/framework-bundle ###
+
+###> lexik/jwt-authentication-bundle ###
+/config/jwt/*.pem
+###< lexik/jwt-authentication-bundle ###
+
+###> phpunit/phpunit ###
+/phpunit.xml
+.phpunit.result.cache
+###< phpunit/phpunit ###
+
+node_modules
+npm-debug.log
+package-lock.json
+pnpm-lock.yaml

@@ -1,0 +1,81 @@
+stages:
+  - build-base
+  - build-deps
+  - build-final
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: tcp://docker:2375
+  CI_REGISTRY_IMAGE: $CI_REGISTRY
+
+.docker:
+  image: docker:20.10.16
+  only:
+    - main
+    - develop
+  services:
+    - docker:20.10.16-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+build-base:
+  extends: .docker
+  stage: build-base
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:base || true
+    - docker build --target base --cache-from $CI_REGISTRY_IMAGE:base -t $CI_REGISTRY_IMAGE:base .
+    - docker push $CI_REGISTRY_IMAGE:base
+  only:
+    changes:
+      - Dockerfile
+      - docker/**/*
+
+build-deps:
+  extends: .docker
+  stage: build-deps
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:base || true
+    - docker build --target builder --cache-from $CI_REGISTRY_IMAGE:base -t $CI_REGISTRY_IMAGE:deps .
+    - docker push $CI_REGISTRY_IMAGE:deps
+  only:
+    changes:
+      - composer.json
+      - composer.lock
+
+build-final:
+  extends: .docker
+  stage: build-final
+  script:
+    # Pull des images de base et des dépendances
+    - docker pull $CI_REGISTRY_IMAGE:base || true
+    - docker pull $CI_REGISTRY_IMAGE:deps || true
+    
+    # Créer et monter le conteneur 'deps' pour récupérer le dossier 'vendor'
+    - docker create --name deps_container $CI_REGISTRY_IMAGE:deps
+    - docker cp deps_container:/app/vendor ./vendor
+    - docker rm deps_container  # Supprime le conteneur après la copie
+
+    # Construire l'image finale en utilisant les fichiers récupérés
+    - docker build --target final --cache-from $CI_REGISTRY_IMAGE:base --cache-from $CI_REGISTRY_IMAGE:deps -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA -t $CI_REGISTRY_IMAGE:latest .
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE:latest
+
+deploy:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - echo "Deploying to production server"
+    - 'command -v ssh-agent >/dev/null || ( apk add --update openssh )'
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -pXXXX $SSH_HOST >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+  script:
+    # Déploiement de l'image sur le serveur de production
+    - ssh -p XXXX $SSH_USER@$SSH_HOST "cd $WORK_DIR && docker pull $CI_REGISTRY_IMAGE:latest && docker-compose up -d"
+  only:
+    - main

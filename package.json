@@ -1,0 +1,24 @@
+{
+  "name": "boilerplate-symfony-frankenphp-simple",
+  "version": "1.0.0",
+  "description": "Un boilerplate Symfony moderne et robuste utilisant FrankenPHP, conçu pour le développement d'APIs REST sécurisées.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "docker exec boilerplate-symfony-simple php bin/console d:m:m --env=test --no-interaction && docker exec boilerplate-symfony-simple ./vendor/bin/pest",
+    "phpstan": "vendor/bin/phpstan analyse",
+    "check": "composer validate && npm run phpstan && npm run test",
+    "prepare": "husky install"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
+    "husky": "^8.0.0"
+  }
+}

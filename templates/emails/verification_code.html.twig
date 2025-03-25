@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Votre code de vérification</title>
+        <style>
+            body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; }
+            .container { background-color: #ffffff; max-width: 600px; margin: auto; padding: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+            .header { text-align: center; margin-bottom: 20px; }
+            .otp { font-size: 2em; color: #333333; text-align: center; margin: 20px 0; }
+            .footer { font-size: 0.9em; color: #777777; text-align: center; margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Code de vérification</h1>
+            </div>
+            <p>Bonjour,</p>
+            <p>Voici votre code de vérification pour valider votre connexion :</p>
+            <div class="otp">
+                {{ otp }}
+            </div>
+            <p>Ce code expirera le : {{ otp_expiration }}.</p>
+            <p>Si vous n'avez pas demandé ce code, veuillez ignorer cet email.</p>
+            <div class="footer">
+                <p>Merci,<br>L'équipe de support</p>
+            </div>
+        </div>
+    </body>
+</html> 

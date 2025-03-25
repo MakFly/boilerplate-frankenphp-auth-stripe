@@ -1,0 +1,76 @@
+monolog:
+    channels:
+        - deprecation
+        - app       # Application specific logs
+        - stripe    # Canal pour les logs Stripe
+
+when@dev:
+    monolog:
+        handlers:
+            main:
+                type: stream
+                path: "%kernel.logs_dir%/%kernel.environment%.log"
+                level: debug
+                channels: ["!event"]
+
+            console:
+                type: console
+                process_psr_3_messages: false
+                channels: ["!event", "!console"]
+
+            app:
+                type: stream
+                path: "%kernel.logs_dir%/app.log"
+                level: debug
+                channels: ["app"]
+
+            stripe:
+                type: stream
+                path: "%kernel.logs_dir%/stripe.log"
+                level: debug
+                channels: ["stripe"]
+
+when@test:
+    monolog:
+        handlers:
+            main:
+                type: fingers_crossed
+                action_level: error
+                handler: nested
+                excluded_http_codes: [404, 405]
+                channels: ["!event"]
+            nested:
+                type: stream
+                path: "%kernel.logs_dir%/%kernel.environment%.log"
+                level: debug
+
+when@prod:
+    monolog:
+        handlers:
+            main:
+                type: fingers_crossed
+                action_level: error
+                handler: nested
+                excluded_http_codes: [404, 405]
+                buffer_size: 50
+            nested:
+                type: stream
+                path: php://stderr
+                level: debug
+                formatter: monolog.formatter.json
+            console:
+                type: console
+                process_psr_3_messages: false
+                channels: ["!event"]
+            deprecation:
+                type: stream
+                channels: [deprecation]
+                path: php://stderr
+            
+            # Stripe specific logs en production
+            stripe:
+                type: stream
+                path: php://stderr
+                level: info
+                channels: ["stripe"]
+                formatter: monolog.formatter.json

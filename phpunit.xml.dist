@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.3/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <php>
+        <env name="APP_ENV" value="test" force="true"/>
+        <env name="KERNEL_CLASS" value="App\Kernel"/>
+        <env name="APP_DEBUG" value="1" force="true"/>
+        <env name="APP_SECRET" value="s$cretf0rt3st"/>
+        <env name="SYMFONY_DEPRECATIONS_HELPER" value="999999"/>
+        <env name="DATABASE_URL" value="postgresql://test:test@postgres:5432/symfony_test?serverVersion=16&amp;charset=utf8"/>
+        <env name="JWT_SECRET_KEY" value="%kernel.project_dir%/config/jwt/private.test.pem"/>
+        <env name="JWT_PUBLIC_KEY" value="%kernel.project_dir%/config/jwt/public.test.pem"/>
+        <env name="JWT_PASSPHRASE" value="a1b2c3d4e5!@#$%^"/>
+        <env name="PANTHER_APP_ENV" value="panther" force="true"/>
+        <env name="PANTHER_ERROR_SCREENSHOT_DIR" value="./var/error-screenshots" force="true"/>
+    </php>
+    
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    
+    <source>
+        <include>
+            <directory suffix=".php">./app</directory>
+            <directory suffix=".php">./src</directory>
+        </include>
+    </source>
+</phpunit>

@@ -1,0 +1,116 @@
+{
+    "name": "symfony/boilerplate-symfony-frankenphp-simple",
+    "description": "A modern and robust Symfony boilerplate using FrankenPHP, designed for building secure REST APIs.",
+    "keywords": [
+        "symfony",
+        "frankenphp",
+        "boilerplate",
+        "api",
+        "rest",
+        "secure"
+    ],
+    "type": "project",
+    "license": "proprietary",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require": {
+        "php": ">=8.2",
+        "ext-ctype": "*",
+        "ext-iconv": "*",
+        "doctrine/dbal": "^3",
+        "doctrine/doctrine-bundle": "^2.12",
+        "doctrine/doctrine-fixtures-bundle": "^3.6",
+        "doctrine/doctrine-migrations-bundle": "^3.3",
+        "doctrine/orm": "^3.2",
+        "google/apiclient": "^2.18.2",
+        "guzzlehttp/guzzle": "^7.8",
+        "lexik/jwt-authentication-bundle": "^3.1.1",
+        "phpdocumentor/reflection-docblock": "^5.4",
+        "phpstan/phpdoc-parser": "^1.29",
+        "stripe/stripe-php": "^16.4",
+        "symfony/browser-kit": "7.1.*",
+        "symfony/console": "7.1.*",
+        "symfony/dotenv": "7.1.*",
+        "symfony/flex": "^2",
+        "symfony/framework-bundle": "7.1.*",
+        "symfony/mailer": "7.1.*",
+        "symfony/monolog-bundle": "^3.10",
+        "symfony/property-access": "7.1.*",
+        "symfony/property-info": "7.1.*",
+        "symfony/runtime": "7.1.*",
+        "symfony/security-bundle": "7.1.*",
+        "symfony/serializer": "7.1.*",
+        "symfony/twig-bundle": "7.1.*",
+        "symfony/uid": "7.1.*",
+        "symfony/validator": "7.1.*",
+        "symfony/yaml": "7.1.*",
+        "twig/cssinliner-extra": "^3.11",
+        "twig/extra-bundle": "^2.12|^3.0",
+        "twig/inky-extra": "^3.11",
+        "twig/twig": "^2.12|^3.0"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true,
+            "symfony/flex": true,
+            "symfony/runtime": true,
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": false
+        },
+        "sort-packages": true
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/",
+            "App\\Tests\\": "tests/"
+        }
+    },
+    "replace": {
+        "symfony/polyfill-ctype": "*",
+        "symfony/polyfill-iconv": "*",
+        "symfony/polyfill-php72": "*",
+        "symfony/polyfill-php73": "*",
+        "symfony/polyfill-php74": "*",
+        "symfony/polyfill-php80": "*",
+        "symfony/polyfill-php81": "*",
+        "symfony/polyfill-php82": "*"
+    },
+    "scripts": {
+        "auto-scripts": {
+            "cache:clear": "symfony-cmd",
+            "assets:install %PUBLIC_DIR%": "symfony-cmd"
+        },
+        "post-install-cmd": [
+            "@auto-scripts"
+        ],
+        "post-update-cmd": [
+            "@auto-scripts"
+        ],
+        "prepare": "husky install"
+    },
+    "conflict": {
+        "symfony/symfony": "*"
+    },
+    "extra": {
+        "symfony": {
+            "allow-contrib": false,
+            "require": "7.1.*"
+        }
+    },
+    "require-dev": {
+        "mockery/mockery": "^1.6",
+        "pestphp/pest": "^3.6",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-doctrine": "^2.0",
+        "phpstan/phpstan-symfony": "^2.0",
+        "symfony/maker-bundle": "^1.62",
+        "symfony/stopwatch": "7.1.*",
+        "symfony/web-profiler-bundle": "7.1.*"
+    }
+}

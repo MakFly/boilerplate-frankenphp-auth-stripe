@@ -1,0 +1,100 @@
+services:
+    ###> webapp ###
+    webapp:
+        container_name: boilerplate-symfony-simple
+        build:
+            context: .
+            dockerfile: Dockerfile
+            args:
+                ENVIRONMENT: dev
+                SERVER_NAME: :80
+        ports:
+            - 80:80
+            # - 443:443
+            # - 443:443/udp
+        env_file:
+            - .env
+        environment:
+            - APP_ENV=dev
+        volumes:
+            - ./:/app
+            - caddy_data:/data
+            - caddy_config:/config
+        # commentez la ligne suivante en production, elle permet d'avoir de beaux logs lisibles en dev
+        tty: true
+        networks:
+            - default
+    ###< webapp ###
+
+    ###> postgres ###
+    postgres:
+        image: postgres:latest
+        environment:
+            POSTGRES_USER: test
+            POSTGRES_PASSWORD: test
+            POSTGRES_DB: symfony
+        ports:
+            - 5432:5432
+        volumes:
+            - boilerplate-db:/var/lib/postgresql/data
+        networks:
+            - default
+    ###< postgres ###
+
+    ###> adminer ###
+    adminer:
+        image: adminer
+        environment:
+            - ADMINER_PLUGINS=${ADM_PLUGINS}
+            - ADMINER_DESIGN=${ADM_DESIGN}
+            - ADMINER_DEFAULT_SERVER=${ADM_DEFAULT_SERVER}
+            - ADMINER_DEFAULT_USERNAME=${ADM_DEFAULT_USERNAME}
+            - ADMINER_DEFAULT_PASSWORD=${ADM_DEFAULT_PASSWORD}
+        ports:
+            - "9080:8080"
+        volumes:
+            - adminer-data:/var/lib/adminer
+        networks:
+            - default
+    ###< adminer ###
+
+    ###> dozzle ###
+    dozzle:
+        image: amir20/dozzle:latest
+        ports:
+            - 8888:8080
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+        networks:
+            - default
+    ###< dozzle ###
+
+    ###> mailpit ###
+    mailpit:
+        image: axllent/mailpit
+        volumes:
+            - mailpit-data:/data
+        ports:
+            - 1025:1025
+            - 8025:8025
+        environment:
+            MP_MAX_MESSAGES: 5000
+            MP_DATABASE: /data/mailpit.db
+            MP_SMTP_AUTH_ACCEPT_ANY: 1
+            MP_SMTP_AUTH_ALLOW_INSECURE: 1
+        networks:
+            - default
+    ###< mailpit ###
+
+volumes:
+    mailpit-data:
+    boilerplate-db:
+    boilerplate-db-test:
+    adminer-data:
+    caddy_data:
+    caddy_config:
+
+networks:
+    default:
+        driver: bridge
+

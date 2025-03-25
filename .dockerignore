@@ -1,0 +1,65 @@
+# Ignorer les configurations locales et fichiers sensibles
+.env
+.env.*
+!.env.prod # garder le fichier de production si nécessaire
+
+# Ignorer les fichiers de configuration spécifiques aux éditeurs
+.editorconfig
+.idea
+.vscode/
+*.swp
+
+# Ignorer les fichiers de logs
+var/logs/
+var/cache/
+var/sessions/
+var/test/
+
+# Ignorer les dépendances (gérées par Composer)
+vendor/
+
+# Ignorer les fichiers de tests
+tests/
+
+# Ignorer les fichiers et dossiers de documentation
+docs/
+*.md
+
+# Ignorer les autres fichiers de configuration de CI/CD
+.github/
+.gitlab-ci.yml
+.github/workflows/
+
+# Ignorer les fichiers spécifiques de Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Ignorer les fichiers compilés de PHP
+*.php~
+*.phpunit.result.cache
+
+# Ignorer les fichiers de cache
+.cache/
+phpunit.xml.dist
+
+# Autres fichiers système
+node_modules/
+npm-debug.log
+yarn-error.log
+
+.gitignore
+.git/
+
+compose.yaml
+compose.override.yaml
+
+Makefile
+
+# Ignorer les fichiers de configuration de PHP
+docker/supervisord
+
+# Ignorer les fichiers de sauvegarde
+docker/_sources/
+
+deploy/

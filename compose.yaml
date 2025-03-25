@@ -1,0 +1,24 @@
+services:
+    ###> webapp ###
+    webapp:
+        container_name: boilerplate-symfony-production
+        image: ghcr.io/makfly/boilerplate-symfony-frankenphp-simple:latest
+        ports:
+            - 80:80
+            # - 443:443
+            # - 443:443/udp
+        env_file:
+            - .env
+        environment:
+            - APP_ENV=dev
+            - USE_S6_OVERLAY=true
+        volumes:
+            - .env:/app/.env
+        networks:
+            - default
+    ###< webapp ###
+
+networks:
+    default:
+        driver: bridge
+
