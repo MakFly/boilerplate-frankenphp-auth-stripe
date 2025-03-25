@@ -1,5 +1,9 @@
 # Boilerplate Symfony FrankenPHP
 
+[English](#english) | [Français](#français)
+
+# Français
+
 Un boilerplate Symfony moderne et robuste utilisant FrankenPHP, conçu pour le développement d'APIs REST sécurisées.
 
 ## 🚀 Caractéristiques
@@ -133,20 +137,171 @@ make test-coverage
 
 ## 📚 Documentation Détaillée
 
-Pour plus de détails sur chaque système :
+La documentation est disponible en français et en anglais :
 
-- [Documentation du Système de Notifications](docs/notification-system.md)
-- [Documentation du Système de Paiement](docs/payment-system.md)
-- [Documentation de l'Authentification SSO Google](docs/sso-google-authentication.md)
+**Français**
+- [Système de Notifications](docs/fr/notification-system.md)
+- [Système de Paiement](docs/fr/payment-system.md)
+- [Authentification SSO Google](docs/fr/sso-google-authentication.md)
+- [Configuration Husky](docs/fr/husky-configuration.md)
 
-## 🤝 Contribution
+**English**
+- [Notification System](docs/en/notification-system.md)
+- [Payment System](docs/en/payment-system.md)
+- [Google SSO Authentication](docs/en/sso-google-authentication.md)
+- [Husky Configuration](docs/en/husky-configuration.md)
 
-1. Fork le projet
-2. Créez votre branche (`git checkout -b feature/amazing-feature`)
-3. Committez vos changements (`git commit -m 'feat: add amazing feature'`)
-4. Push sur la branche (`git push origin feature/amazing-feature`)
-5. Ouvrez une Pull Request
+---
 
-## 📄 Licence
+# English
 
-Ce projet est sous licence MIT - voir le fichier [LICENSE](LICENSE) pour plus de détails.
+A modern and robust Symfony boilerplate using FrankenPHP, designed for secure REST API development.
+
+## 🚀 Features
+
+- **PHP 8.2+** with latest features
+- **Symfony 7.0+** 
+- **Docker** with FrankenPHP for optimized development environment
+- **Modular architecture** following SOLID principles
+- **Tests** with PestPHP
+- **JWT authentication** system with Google SSO support
+- Integrated **payment system** with Stripe
+- Multi-channel **notification** system
+
+## 📦 Prerequisites
+
+- Docker & Docker Compose
+- Make (for utility commands)
+- Git
+
+## 🛠️ Installation
+
+```bash
+git clone [repo-url]
+cd boilerplate-symfony-frankenphp-simple
+make install
+```
+
+## 💡 Project Architecture
+
+### Main Systems
+
+1. **Google SSO Authentication System**
+   - Simplified authentication via Google
+   - JWT session management
+   - NextJS frontend support with better-auth
+   - Automatic account linking
+
+2. **Stripe Payment System**
+   - One-time payments (Payment Intents)
+   - Recurring subscriptions
+   - Secure webhooks
+   - Automatic invoice generation
+   - NextJS frontend interface
+
+3. **Notification System**
+   - Extensible multi-channel architecture
+   - Email support (Symfony Mailer)
+   - SMS support
+   - Push notifications
+   - Strategy & Factory patterns
+
+## 🔒 Security
+
+- JWT for API authentication
+- CSRF protection
+- Rate limiting
+- Input data validation
+- Secure token management
+
+## 📝 Code Convention
+
+- PSR-12
+- Strict typing (declare(strict_types=1))
+- Hexagonal architecture
+- Unit and functional tests
+- PHPDoc documentation
+
+## 🗄️ Folder Structure
+
+```
+src/
+  ├── Attribute/         # PHP Attributes
+  ├── Controller/        # API Controllers
+  ├── Entity/           # Doctrine Entities
+  ├── Service/          # Business Services
+  ├── Interface/        # Interfaces
+  ├── Repository/       # Doctrine Repositories
+  ├── EventListener/    # Event Listeners
+  └── EventSubscriber/  # Event Subscribers
+```
+
+## 🔧 Configuration
+
+Main environment variables to be defined in `.env`:
+
+```env
+# Base
+APP_ENV=dev
+APP_SECRET=your_secret
+
+# Database
+DATABASE_URL=postgresql://user:pass@postgres:5432/db_name
+
+# JWT
+JWT_SECRET_KEY=%kernel.project_dir%/config/jwt/private.pem
+JWT_PUBLIC_KEY=%kernel.project_dir%/config/jwt/public.pem
+JWT_PASSPHRASE=your_passphrase
+
+# Google SSO
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+
+# Stripe
+STRIPE_PUBLIC_KEY=your_stripe_public_key
+STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
+```
+
+## 🧪 Tests
+
+```bash
+# Prepare test database
+make test-prepare
+
+# Run tests
+make test
+
+# Tests with coverage
+make test-coverage
+```
+
+## 🛠️ Available Make Commands
+
+- `make install` : Initial project installation
+- `make dev` : Start development environment
+- `make test` : Run tests
+- `make stan` : Static code analysis
+- `make workspace` : Open shell in container
+- `make logs` : Display logs
+- `make restart` : Restart containers
+
+## 📚 Detailed Documentation
+
+For more details on each system, see:
+
+- [Notification System Documentation](docs/en/notification-system.md)
+- [Payment System Documentation](docs/en/payment-system.md)
+- [Google SSO Authentication Documentation](docs/en/sso-google-authentication.md)
+
+## 🤝 Contributing
+
+1. Fork the project
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
