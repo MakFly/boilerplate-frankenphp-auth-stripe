@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ subject }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .header {
+            background-color: #f5f5f5;
+            padding: 20px;
+            text-align: center;
+            border-bottom: 2px solid #ddd;
+        }
+        .content {
+            padding: 20px;
+        }
+        .footer {
+            background-color: #f5f5f5;
+            padding: 10px 20px;
+            text-align: center;
+            font-size: 0.8em;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ subject }}</h1>
+    </div>
+    <div class="content">
+        {% if message is defined %}
+            <p>{{ message }}</p>
+        {% endif %}
+        
+        {% if username is defined %}
+            <p>Bonjour {{ username }},</p>
+        {% endif %}
+        
+        {% if activationLink is defined %}
+            <p>Cliquez sur le lien ci-dessous pour activer votre compte :</p>
+            <p><a href="{{ activationLink }}">Activer mon compte</a></p>
+        {% endif %}
+        
+        {% if content is defined and content is not iterable %}
+            <p>{{ content }}</p>
+        {% endif %}
+    </div>
+    <div class="footer">
+        <p>Ceci est un message automatique. Merci de ne pas y répondre.</p>
+    </div>
+</body>
+</html>

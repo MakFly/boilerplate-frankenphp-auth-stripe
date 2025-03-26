@@ -1,8 +1,14 @@
+# config/packages/monolog.yaml
 monolog:
     channels:
         - deprecation
-        - app       # Application specific logs
-        - stripe    # Canal pour les logs Stripe
+        - app  
+        - stripe
+        - messenger
+        - discord
+        - discord_error
+        - discord_system
+        - discord_info
 
 when@dev:
     monolog:
@@ -10,25 +16,52 @@ when@dev:
             main:
                 type: stream
                 path: "%kernel.logs_dir%/%kernel.environment%.log"
-                level: debug
-                channels: ["!event"]
-
+                level: info  # Changez debug en info pour réduire la verbosité
+                channels: ["!event", "!messenger"]  # Excluez le canal messenger
             console:
                 type: console
                 process_psr_3_messages: false
                 channels: ["!event", "!console"]
-
             app:
                 type: stream
                 path: "%kernel.logs_dir%/app.log"
                 level: debug
                 channels: ["app"]
-
             stripe:
                 type: stream
                 path: "%kernel.logs_dir%/stripe.log"
                 level: debug
                 channels: ["stripe"]
+            messenger:
+                type: stream
+                path: "php://stderr"  # Envoie vers la sortie standard
+                level: debug
+                channels: ["messenger"]
+                
+            # Discord handlers for different channels
+            discord:
+                type: service
+                id: app.monolog.discord_info_handler
+                level: info
+                channels: ["discord"]
+                
+            discord_error:
+                type: service
+                id: app.monolog.discord_error_handler
+                level: error
+                channels: ["discord_error"]
+                
+            discord_system:
+                type: service
+                id: app.monolog.discord_system_handler
+                level: info
+                channels: ["discord_system"]
+                
+            discord_info:
+                type: service
+                id: app.monolog.discord_info_handler
+                level: info
+                channels: ["discord_info"]
 
 when@test:
     monolog:
@@ -73,4 +106,33 @@ when@prod:
                 path: php://stderr
                 level: info
                 channels: ["stripe"]
+                formatter: monolog.formatter.json
+
+            # Discord logs in production
+            discord:
+                type: service
+                id: app.monolog.discord_info_handler
+                level: error
+                channels: ["discord"]
+                formatter: monolog.formatter.json
+                
+            discord_error:
+                type: service
+                id: app.monolog.discord_error_handler
+                level: error
+                channels: ["discord_error"]
+                formatter: monolog.formatter.json
+                
+            discord_system:
+                type: service
+                id: app.monolog.discord_system_handler
+                level: error
+                channels: ["discord_system"]
+                formatter: monolog.formatter.json
+                
+            discord_info:
+                type: service
+                id: app.monolog.discord_info_handler
+                level: warning
+                channels: ["discord_info"]
                 formatter: monolog.formatter.json

@@ -62,7 +62,7 @@ class ResetPasswordService
                     'reset_link' => $resetLink,
                     'expiration_delay' => self::TOKEN_EXPIRATION_DELAY
                 ],
-                'emails/reset_password.html.twig'
+                ['template' => 'emails/reset_password.html.twig']
             );
 
             return true;

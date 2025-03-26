@@ -5,38 +5,52 @@ declare(strict_types=1);
 namespace App\Service\Notifier;
 
 use App\Interface\NotifierInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Email;
 use Twig\Environment;
-use Psr\Log\LoggerInterface;
 
-class EmailNotifier implements NotifierInterface
+final readonly class EmailNotifier implements NotifierInterface
 {
     public function __construct(
-        private readonly MailerInterface $mailer,
-        private readonly Environment $twig,
+        private MailerInterface $mailer,
+        private Environment $twig,
         #[Autowire('%mailer_from%')]
-        private readonly string $mailerFrom,
-        private readonly LoggerInterface $logger
+        private string $mailerFrom,
+        private LoggerInterface $logger
     ) {
     }
 
-    public function send(string $to, string $subject, array $content, string $template): void
+    public function send(string $recipient, string $subject, string|array $content, array $options = []): bool
     {
         try {
             $email = new Email();
             $email->from($this->mailerFrom)
-                  ->to($to)
+                  ->to($recipient)
                   ->subject($subject);
             
-            $html = $this->twig->render($template, $content);
-            $email->html($html);
+            // Extraction du template des options
+            $template = $options['template'] ?? null;
+            
+            if ($template) {
+                $html = $this->twig->render($template, is_array($content) ? $content : ['content' => $content]);
+                $email->html($html);
+            } else {
+                $email->text(is_array($content) ? json_encode($content) : $content);
+            }
             
             $this->mailer->send($email);
-        } catch (\Exception $e) {
-            $this->logger->error('Email sending failed: ' . $e->getMessage());
-            throw $e;
+            
+            return true;
+        } catch (\Throwable $e) {
+            $this->logger->error('Erreur lors de l\'envoi de l\'email: ' . $e->getMessage(), [
+                'recipient' => $recipient,
+                'subject' => $subject,
+                'exception' => $e,
+            ]);
+            
+            return false;
         }
     }
 }

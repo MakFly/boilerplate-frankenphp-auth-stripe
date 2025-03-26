@@ -66,7 +66,7 @@ final class AuthService extends AuthOptionsService implements AuthInterface
                     'otp' => $otp,
                     'otp_expiration' => $user->getOtpExpiration()->format('Y-m-d H:i:s')
                 ],
-                'emails/otp.html.twig'
+                ['template' => 'emails/otp.html.twig']
             );
 
             return true;

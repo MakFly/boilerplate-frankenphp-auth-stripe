@@ -1,0 +1,191 @@
+{
+  "info": {
+    "_postman_id": "3a87e2b8-4db8-4fce-b8ab-0db99721e8f5",
+    "name": "Système de Notification Symfony",
+    "description": "Collection pour tester le système de notification asynchrone",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Envoi Email (Synchrone)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"channel\": \"email\",\n    \"recipient\": \"user@example.com\",\n    \"subject\": \"Bienvenue sur notre plateforme\",\n    \"content\": {\n        \"username\": \"Jean Dupont\",\n        \"message\": \"Merci de vous être inscrit sur notre plateforme.\",\n        \"activationLink\": \"https://example.com/activate/ABC123\"\n    },\n    \"options\": {\n        \"template\": \"emails/notification.html.twig\"\n    },\n    \"async\": false\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/notifications/send",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "notifications",
+            "send"
+          ]
+        },
+        "description": "Envoie une notification email de façon synchrone"
+      },
+      "response": []
+    },
+    {
+      "name": "Envoi Email (Asynchrone)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"channel\": \"email\",\n    \"recipient\": \"user@example.com\",\n    \"subject\": \"Bienvenue sur notre plateforme\",\n    \"content\": {\n        \"username\": \"Jean Dupont\",\n        \"message\": \"Merci de vous être inscrit sur notre plateforme.\",\n        \"activationLink\": \"https://example.com/activate/ABC123\"\n    },\n    \"options\": {\n        \"template\": \"emails/notification.html.twig\"\n    },\n    \"async\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/notifications/send",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "notifications",
+            "send"
+          ]
+        },
+        "description": "Envoie une notification email de façon asynchrone via la file d'attente"
+      },
+      "response": []
+    },
+    {
+      "name": "Envoi SMS (Synchrone)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"channel\": \"sms\",\n    \"recipient\": \"+33612345678\",\n    \"subject\": \"Code de vérification\",\n    \"content\": \"Votre code de vérification est 123456\",\n    \"options\": {},\n    \"async\": false\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/notifications/send",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "notifications",
+            "send"
+          ]
+        },
+        "description": "Envoie une notification SMS de façon synchrone"
+      },
+      "response": []
+    },
+    {
+      "name": "Envoi SMS (Asynchrone)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"channel\": \"sms\",\n    \"recipient\": \"+33612345678\",\n    \"subject\": \"Code de vérification\",\n    \"content\": \"Votre code de vérification est 123456\",\n    \"options\": {},\n    \"async\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/notifications/send",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "notifications",
+            "send"
+          ]
+        },
+        "description": "Envoie une notification SMS de façon asynchrone via la file d'attente"
+      },
+      "response": []
+    },
+    {
+      "name": "Envoi Multi-Canal (Synchrone)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"channels\": [\"email\", \"sms\"],\n    \"recipient\": \"user@example.com\",\n    \"subject\": \"Alerte de sécurité\",\n    \"content\": \"Une connexion inhabituelle a été détectée sur votre compte.\",\n    \"options\": {\n        \"template\": \"emails/notification.html.twig\"\n    },\n    \"async\": false\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/notifications/send-multi",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "notifications",
+            "send-multi"
+          ]
+        },
+        "description": "Envoie une notification via plusieurs canaux de façon synchrone"
+      },
+      "response": []
+    },
+    {
+      "name": "Envoi Multi-Canal (Asynchrone)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"channels\": [\"email\", \"sms\"],\n    \"recipient\": \"user@example.com\",\n    \"subject\": \"Alerte de sécurité\",\n    \"content\": \"Une connexion inhabituelle a été détectée sur votre compte.\",\n    \"options\": {\n        \"template\": \"emails/notification.html.twig\"\n    },\n    \"async\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/notifications/send-multi",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "notifications",
+            "send-multi"
+          ]
+        },
+        "description": "Envoie une notification via plusieurs canaux de façon asynchrone via la file d'attente"
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost",
+      "type": "string"
+    }
+  ]
+}

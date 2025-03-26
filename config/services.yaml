@@ -16,6 +16,7 @@ parameters:
     
     # Payment system configuration
     payment_system_enabled: '%env(bool:PAYMENT_SYSTEM_ENABLED)%'
+    default_discord_username: 'Symfony Logger'
 
 services:
     # default configuration for services in *this* file
@@ -32,8 +33,49 @@ services:
             - '../src/Entity/'
             - '../src/Kernel.php'
 
-    App\EventListener\ExceptionListener:
-        tags:
-            - { name: kernel.event_listener, event: kernel.exception }
+# Configuration des notificateurs
+    _instanceof:
+        App\Interface\NotifierInterface:
+            tags: ['app.notifier']
+    
+    # Configuration spécifique des notifiers si nécessaire
+    App\Service\Notifier\EmailNotifier:
         arguments:
+            $mailerFrom: '%env(MAILER_SENDER_ADDRESS)%'
+            
+    # Alias pour NotifierInterface (utilisé par AuthService)
+    App\Interface\NotifierInterface: '@App\Service\Notifier\EmailNotifier'
+
+    # Discord Logger Factory - injection directe des webhooks
+    App\Logger\DiscordHandlerFactory:
+        arguments:
+            $httpClient: '@http_client'
             $environment: '%kernel.environment%'
+            $errorWebhook: '%env(DISCORD_WEBHOOK_ERROR)%'
+            $infoWebhook: '%env(DISCORD_WEBHOOK_INFO)%'
+            $systemWebhook: '%env(DISCORD_WEBHOOK_SYSTEM)%'
+            $defaultUsername: '%env(default:default_discord_username:DISCORD_DEFAULT_USERNAME)%'
+            $defaultAvatarUrl: '%env(default::DISCORD_DEFAULT_AVATAR_URL)%'
+    
+    # Discord Logger Handlers for different channels
+    app.monolog.discord_error_handler:
+        class: App\Logger\DiscordHandler
+        factory: ['@App\Logger\DiscordHandlerFactory', 'createHandler']
+        arguments: ['error', !php/const Monolog\Level::Error]
+        
+    app.monolog.discord_system_handler:
+        class: App\Logger\DiscordHandler
+        factory: ['@App\Logger\DiscordHandlerFactory', 'createHandler']
+        arguments: ['system', !php/const Monolog\Level::Info]
+        
+    app.monolog.discord_info_handler:
+        class: App\Logger\DiscordHandler
+        factory: ['@App\Logger\DiscordHandlerFactory', 'createHandler']
+        arguments: ['info', !php/const Monolog\Level::Info]
+            
+    # Controllers with named loggers
+    App\Controller\LoggerExampleController:
+        arguments:
+            $discordErrorLogger: '@monolog.logger.discord_error'
+            $discordSystemLogger: '@monolog.logger.discord_system'
+            $discordInfoLogger: '@monolog.logger.discord_info'

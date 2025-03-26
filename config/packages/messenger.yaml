@@ -1,0 +1,52 @@
+# framework:
+#     messenger:
+#         failure_transport: failed
+#         transports:
+#             notifications:
+#                 dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+#                 retry_strategy:
+#                     max_retries: 3
+#                     delay: 2000
+#                     multiplier: 2
+#                     max_delay: 60000
+#                 options:
+#                     exchange:
+#                         name: notifications
+#                         type: direct
+#                     queues:
+#                         messages:
+#                             binding_keys: [notifications]
+#             failed: 'doctrine://default?queue_name=failed'
+#         buses:
+#             messenger.bus.default:
+#                 middleware:
+#                     - doctrine_transaction
+#                     - doctrine_ping_connection
+#         routing:
+#             'App\Message\SendNotificationMessage': notifications
+#             'App\Message\TestNotificationMessage': notifications
+
+framework:
+    messenger:
+        transports:
+            notifications:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                retry_strategy:
+                    max_retries: 3
+                    delay: 1000
+                    multiplier: 2
+                options:
+                    exchange:
+                        name: notifications
+                        type: direct
+                    queues:
+                        messages: ~
+        routing:
+            'App\Message\TestNotificationMessage': notifications
+            'App\Message\SendNotificationMessage': notifications
+
+when@test:
+    framework:
+        messenger:
+            transports:
+                notifications: 'in-memory://'

@@ -1,30 +1,32 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\EventListener;
 
+use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
+use Symfony\Component\HttpKernel\Event\ExceptionEvent;
+use Symfony\Component\HttpKernel\KernelEvents;
 use App\DTO\Response\ApiResponse;
 use App\Enum\ApiMessage;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\When;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Validator\Exception\ValidationFailedException;
 
-final class ExceptionListener
+#[When(env: 'prod')]
+final class ExceptionListenerListener
 {
     public function __construct(
-        private readonly string $environment,
         private readonly LoggerInterface $logger
     ) {}
 
+    #[AsEventListener(event: KernelEvents::EXCEPTION)]
     public function onKernelException(ExceptionEvent $event): void
     {
-        if ('dev' === $this->environment && !str_starts_with($event->getRequest()->getPathInfo(), '/api')) {
+        if (!str_starts_with($event->getRequest()->getPathInfo(), '/api')) {
             return;
         }
 
@@ -72,14 +74,16 @@ final class ExceptionListener
                 Response::HTTP_BAD_REQUEST => ApiMessage::INVALID_DATA->value,
                 default => ApiMessage::INVALID_DATA->value
             };
-            
+
             $statusCode = $exception->getStatusCode();
-            if ($statusCode === Response::HTTP_BAD_REQUEST && 
-                ($exception->getMessage() === ApiMessage::INVALID_DATA->value || 
-                 $exception->getMessage() === ApiMessage::MISSING_FIELDS->value)) {
+            if (
+                $statusCode === Response::HTTP_BAD_REQUEST &&
+                ($exception->getMessage() === ApiMessage::INVALID_DATA->value ||
+                    $exception->getMessage() === ApiMessage::MISSING_FIELDS->value)
+            ) {
                 $statusCode = Response::HTTP_UNPROCESSABLE_ENTITY;
             }
-            
+
             $response = new ApiResponse(
                 null,
                 $message,
@@ -105,7 +109,7 @@ final class ExceptionListener
                 Response::HTTP_INTERNAL_SERVER_ERROR
             );
         }
-        
+
         $event->setResponse($response);
     }
 }
