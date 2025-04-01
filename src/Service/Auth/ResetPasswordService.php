@@ -14,7 +14,7 @@ use Symfony\Component\Security\Csrf\TokenGenerator\TokenGeneratorInterface;
 
 class ResetPasswordService
 {
-    private const TOKEN_EXPIRATION_DELAY = 10; // minutes
+    private const TOKEN_EXPIRATION_DELAY = 30; // minutes
 
     public function __construct(
         private readonly NotifierInterface $notifier,
