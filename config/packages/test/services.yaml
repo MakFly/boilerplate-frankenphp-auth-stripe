@@ -1,4 +1,0 @@
-services:
-    # Override the StripeService for tests to avoid real Stripe API calls
-    App\Service\Stripe\StripeService:
-        class: App\Tests\Mock\Service\Stripe\MockStripeService 
