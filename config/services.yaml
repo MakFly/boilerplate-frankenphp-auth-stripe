@@ -15,7 +15,6 @@ parameters:
     stripe_webhook_secret: '%env(STRIPE_WEBHOOK_SECRET)%'
     stripe_success_url: '%env(STRIPE_SUCCESS_URL)%'
     stripe_cancel_url: '%env(STRIPE_CANCEL_URL)%'
-    stripe_async_processing_enabled: '%env(bool:STRIPE_ASYNC_PROCESSING_ENABLED)%'
     
     # Payment system configuration
     payment_system_enabled: '%env(bool:PAYMENT_SYSTEM_ENABLED)%'
