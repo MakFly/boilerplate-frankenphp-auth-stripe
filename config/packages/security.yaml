@@ -39,8 +39,10 @@ security:
     # Note: Only the *first* access control that matches will be used
     access_control:
         - { path: ^/api/auth/(login|register|otp|token/refresh), roles: PUBLIC_ACCESS }
-        - { path: ^/api/auth/sso/google, roles: PUBLIC_ACCESS }
         - { path: ^/api/auth/login/check/sso/google, roles: PUBLIC_ACCESS }
+        - { path: ^/api/auth/sso/google, roles: PUBLIC_ACCESS }
+        - { path: ^/api/webhook/stripe, roles: PUBLIC_ACCESS }
+        - { path: ^/api/stripe/products, roles: PUBLIC_ACCESS }
         - { path: ^/api/admin, roles: ROLE_ADMIN }
         - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
 

@@ -6,6 +6,8 @@
 parameters:
     mailer_from: '%env(MAILER_SENDER_ADDRESS)%'
     app.otp.enabled: '%env(bool:APP_OTP_ENABLED)%'
+    timezone: '%env(APP_TIMEZONE)%'
+    locale: '%env(APP_LOCALE)%'
     
     # Stripe configuration
     stripe_secret_key: '%env(STRIPE_SECRET_KEY)%'
@@ -13,6 +15,7 @@ parameters:
     stripe_webhook_secret: '%env(STRIPE_WEBHOOK_SECRET)%'
     stripe_success_url: '%env(STRIPE_SUCCESS_URL)%'
     stripe_cancel_url: '%env(STRIPE_CANCEL_URL)%'
+    stripe_async_processing_enabled: '%env(bool:STRIPE_ASYNC_PROCESSING_ENABLED)%'
     
     # Payment system configuration
     payment_system_enabled: '%env(bool:PAYMENT_SYSTEM_ENABLED)%'
@@ -32,6 +35,7 @@ services:
             - '../src/DependencyInjection/'
             - '../src/Entity/'
             - '../src/Kernel.php'
+            
 
 # Configuration des notificateurs
     _instanceof:

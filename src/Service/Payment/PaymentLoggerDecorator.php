@@ -11,6 +11,7 @@ use App\Interface\PaymentServiceInterface;
 use App\Repository\PaymentRepository;
 use App\Repository\SubscriptionRepository;
 use App\Repository\UserRepository;
+use Psr\Log\LoggerInterface;
 
 final readonly class PaymentLoggerDecorator implements PaymentServiceInterface
 {
@@ -19,6 +20,7 @@ final readonly class PaymentLoggerDecorator implements PaymentServiceInterface
         private PaymentRepository $paymentRepository,
         private SubscriptionRepository $subscriptionRepository,
         private UserRepository $userRepository,
+        private ?LoggerInterface $logger = null,
     ) {
     }
 
@@ -27,6 +29,17 @@ final readonly class PaymentLoggerDecorator implements PaymentServiceInterface
         $sessionData = $this->paymentService->createSession($user, $amount, $currency, $metadata);
         
         $serviceClass = get_class($this->paymentService);
+        
+        if ($this->logger) {
+            $this->logger->info('Session de paiement créée', [
+                'service_class' => $serviceClass,
+                'session_id' => $sessionData['id'],
+                'user_id' => $user->getId(),
+                'amount' => $amount,
+                'currency' => $currency,
+                'metadata' => $metadata
+            ]);
+        }
         
         if ($serviceClass === PaymentIntentService::class) {
             $payment = new Payment();
@@ -60,6 +73,24 @@ final readonly class PaymentLoggerDecorator implements PaymentServiceInterface
 
     public function handleWebhook(string $eventType, array $eventData): bool
     {
-        return $this->paymentService->handleWebhook($eventType, $eventData);
+        if ($this->logger) {
+            $this->logger->debug('PaymentLoggerDecorator: handling webhook', [
+                'event_type' => $eventType,
+                'event_data_keys' => array_keys($eventData),
+                'decorated_service' => get_class($this->paymentService)
+            ]);
+        }
+        
+        $result = $this->paymentService->handleWebhook($eventType, $eventData);
+        
+        if ($this->logger) {
+            $this->logger->debug('PaymentLoggerDecorator: webhook result', [
+                'result' => $result,
+                'event_type' => $eventType,
+                'service_class' => get_class($this->paymentService)
+            ]);
+        }
+        
+        return $result;
     }
 }

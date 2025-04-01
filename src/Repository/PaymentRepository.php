@@ -33,4 +33,18 @@ class PaymentRepository extends ServiceEntityRepository
     {
         return $this->findOneBy(['stripeId' => $stripeId]);
     }
+
+    public function findOneByPaymentIntentId(string $paymentIntentId): ?Payment
+    {
+        return $this->createQueryBuilder('p')
+            ->andWhere('p.stripeId = :paymentIntentId OR p.paymentIntentId = :paymentIntentId')
+            ->setParameter('paymentIntentId', $paymentIntentId)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    public function findOneByCheckoutSessionId(string $sessionId): ?Payment
+    {
+        return $this->findOneBy(['stripeId' => $sessionId]);
+    }
 }

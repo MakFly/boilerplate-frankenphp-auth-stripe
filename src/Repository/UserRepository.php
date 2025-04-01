@@ -66,6 +66,14 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
     }
 
     /**
+     * Trouve un utilisateur par son ID client Stripe
+     */
+    public function findOneByStripeCustomerId(string $stripeCustomerId): ?User
+    {
+        return $this->findOneBy(['stripeCustomerId' => $stripeCustomerId]);
+    }
+
+    /**
      * @param User $user
      * @return UserJit|null
      */

@@ -45,4 +45,9 @@ class InvoiceRepository extends ServiceEntityRepository
     {
         return $this->findOneBy(['stripeInvoiceId' => $stripeInvoiceId]);
     }
+
+    public function findOneByStripeInvoiceId(string $stripeInvoiceId): ?Invoice
+    {
+        return $this->findByStripeInvoiceId($stripeInvoiceId);
+    }
 }

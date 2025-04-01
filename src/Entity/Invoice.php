@@ -18,6 +18,7 @@ class Invoice
     public const STATUS_PAID = 'paid';
     public const STATUS_VOID = 'void';
     public const STATUS_UNCOLLECTIBLE = 'uncollectible';
+    public const STATUS_PAST_DUE = 'past_due';
 
     #[ORM\Id]
     #[ORM\Column(type: 'uuid')]

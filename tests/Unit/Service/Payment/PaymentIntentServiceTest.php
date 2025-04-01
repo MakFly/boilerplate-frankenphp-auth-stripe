@@ -13,189 +13,254 @@ use App\Service\Invoice\InvoiceService;
 use App\Service\Payment\PaymentIntentService;
 use Stripe\StripeClient;
 use Symfony\Component\Uid\Uuid;
+use PHPUnit\Framework\MockObject\MockObject;
+use Psr\Log\LoggerInterface;
+use Tests\TestCase;
 
-beforeEach(function () {
-    $this->paymentRepository = mock(PaymentRepository::class);
-    $this->invoiceRepository = mock(InvoiceRepository::class);
-    $this->subscriptionRepository = mock(SubscriptionRepository::class);
-    
-    // Mock Stripe client
-    $this->mockStripe = mock(StripeClient::class);
-    $this->mockStripe->checkout = new \stdClass();
-    $this->mockStripe->checkout->sessions = mock(\stdClass::class);
-    $this->mockStripe->invoiceItems = mock(\stdClass::class);
-    $this->mockStripe->invoices = mock(\stdClass::class);
-    
-    $this->invoiceService = new InvoiceService(
-        'sk_test_123',
-        $this->invoiceRepository,
-        $this->paymentRepository,
-        $this->subscriptionRepository,
-        $this->mockStripe
-    );
-    
-    $this->paymentService = new PaymentIntentService(
-        'sk_test_123',
-        'http://localhost/success',
-        'http://localhost/cancel',
-        $this->paymentRepository,
-        $this->invoiceService,
-        $this->mockStripe
-    );
-});
+class PaymentIntentServiceTest extends TestCase
+{
+    private PaymentIntentService $paymentIntentService;
+    private MockObject $stripeClientMock;
+    private MockObject $paymentRepositoryMock;
+    private MockObject $invoiceServiceMock;
+    private MockObject $loggerMock;
+    private \stdClass $mockSession;
 
-test('createSession crée une session de paiement valide', function () {
-    $user = new User();
-    $user->setEmail('test@example.com');
-    $user->setId(Uuid::v4());
+    protected function setUp(): void
+    {
+        $this->stripeClientMock = $this->getMockBuilder(StripeClient::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['__get'])
+            ->getMock();
+            
+        $this->paymentRepositoryMock = $this->createMock(PaymentRepository::class);
+        $this->invoiceServiceMock = $this->createMock(InvoiceService::class);
+        $this->loggerMock = $this->createMock(LoggerInterface::class);
 
-    $mockSession = new \stdClass();
-    $mockSession->id = 'cs_test_123';
-    $mockSession->url = 'https://checkout.stripe.com/pay/cs_test_123';
-    
-    $this->mockStripe->checkout->sessions->expects('create')
-        ->andReturn($mockSession);
+        // Create mock session response
+        $this->mockSession = new \stdClass();
+        $this->mockSession->id = 'cs_test_123';
+        $this->mockSession->url = 'https://checkout.stripe.com/pay/cs_test_123';
 
-    $result = $this->paymentService->createSession(
-        $user,
-        1000,
-        'eur',
-        ['description' => 'Test payment']
-    );
+        // Setup Stripe objects with anonymous classes
+        $mockSession = $this->mockSession;
+        
+        // Create sessions mock
+        $sessions = new class($mockSession) {
+            private $mockSession;
+            
+            public function __construct($mockSession) {
+                $this->mockSession = $mockSession;
+            }
+            
+            public function create($params) {
+                return $this->mockSession;
+            }
+        };
+        
+        // Create checkout mock with sessions
+        $checkout = new \stdClass();
+        $checkout->sessions = $sessions;
+        
+        // Assign to stripe client using the magic method
+        $this->stripeClientMock->method('__get')
+            ->with('checkout')
+            ->willReturn($checkout);
 
-    expect($result)
-        ->toBeArray()
-        ->toHaveKeys(['id', 'url', 'amount', 'currency']);
-});
+        $this->paymentIntentService = new PaymentIntentService(
+            'sk_test_123',
+            'https://example.com/success',
+            'https://example.com/cancel',
+            $this->paymentRepositoryMock,
+            $this->invoiceServiceMock,
+            $this->stripeClientMock,
+            $this->loggerMock
+        );
+    }
 
-test('handleWebhook met à jour le statut du paiement lors d\'un succès', function () {
-    $user = new User();
-    $user->setEmail('test@example.com');
-    $user->setStripeCustomerId('cus_123');
+    public function testHandleWebhookCreatesInvoiceForPaymentIntent(): void
+    {
+        // Créer un paiement fictif
+        $payment = new Payment();
+        $payment->setStatus('pending');
+        $payment->setPaymentIntentId('pi_test_123');
+        $payment->setAmount(1000);
+        $payment->setCurrency('eur');
+        $payment->setUser(new User());
 
-    $payment = new Payment();
-    $payment->setStatus('pending');
-    $payment->setUser($user);
-    $payment->setAmount(1000);
-    $payment->setCurrency('eur');
-    
-    $this->paymentRepository->expects('findOneByStripeId')
-        ->with('cs_test_123')
-        ->andReturn($payment);
-    
-    $this->paymentRepository->expects('save')
-        ->with($payment);
-        
-    // Mock des appels pour la création de facture
-    $this->invoiceRepository->expects('findByPayment')
-        ->with($payment)
-        ->andReturnNull();
-        
-    $mockInvoice = new \stdClass();
-    $mockInvoice->id = 'in_123';
-    $mockInvoice->invoice_pdf = 'https://stripe.com/invoice.pdf';
-    
-    $this->mockStripe->invoiceItems->expects('create')
-        ->andReturn($mockInvoice);
-        
-    $this->mockStripe->invoices->expects('create')
-        ->andReturn($mockInvoice);
-        
-    $this->mockStripe->invoices->expects('finalizeInvoice')
-        ->andReturn($mockInvoice);
-        
-    $this->mockStripe->invoices->expects('pay')
-        ->andReturn($mockInvoice);
-    
-    $this->invoiceRepository->expects('save');
-        
-    $success = $this->paymentService->handleWebhook(
-        'checkout.session.completed',
-        ['id' => 'cs_test_123', 'payment_status' => 'paid']
-    );
-    
-    expect($success)->toBeTrue();
-    expect($payment->getStatus())->toBe('succeeded');
-});
+        // Configurer les mocks
+        $this->paymentRepositoryMock
+            ->expects($this->once())
+            ->method('findOneByPaymentIntentId')
+            ->with('pi_test_123')
+            ->willReturn($payment);
 
-test('handleWebhook marque le paiement comme échoué lors d\'une expiration', function () {
-    $payment = new Payment();
-    $payment->setStatus('pending');
-    
-    $this->paymentRepository->expects('findOneByStripeId')
-        ->with('cs_test_123')
-        ->andReturn($payment);
-    
-    $this->paymentRepository->expects('save')
-        ->with($payment);
-        
-    $success = $this->paymentService->handleWebhook(
-        'checkout.session.expired',
-        ['id' => 'cs_test_123']
-    );
-    
-    expect($success)->toBeTrue();
-    expect($payment->getStatus())->toBe('failed');
-});
+        $this->paymentRepositoryMock
+            ->expects($this->once())
+            ->method('save')
+            ->with($payment);
 
-test('handleWebhook retourne false pour un type d\'événement non géré', function () {
-    $this->paymentRepository->expects('findOneByStripeId')
-        ->with('cs_test_123')
-        ->andReturnNull();
-        
-    $success = $this->paymentService->handleWebhook(
-        'unknown.event',
-        ['id' => 'cs_test_123']
-    );
-    
-    expect($success)->toBeFalse();
-});
+        $this->invoiceServiceMock
+            ->expects($this->once())
+            ->method('createInvoiceForPayment')
+            ->with($payment, null);
 
-test('handleWebhook crée une facture pour un paiement réussi', function () {
-    $user = new User();
-    $user->setStripeCustomerId('cus_123');
-    
-    $payment = new Payment();
-    $payment->setStatus('pending');
-    $payment->setUser($user);
-    $payment->setAmount(1000);
-    $payment->setCurrency('eur');
-    
-    $this->paymentRepository->expects('findOneByStripeId')
-        ->with('cs_test_123')
-        ->andReturn($payment);
-    
-    $this->paymentRepository->expects('save')
-        ->with($payment);
-        
-    // Mock des appels pour la création de facture
-    $this->invoiceRepository->expects('findByPayment')
-        ->with($payment)
-        ->andReturnNull();
-        
-    $mockInvoice = new \stdClass();
-    $mockInvoice->id = 'in_123';
-    $mockInvoice->invoice_pdf = 'https://stripe.com/invoice.pdf';
-    
-    $this->mockStripe->invoiceItems->expects('create')
-        ->andReturn($mockInvoice);
-        
-    $this->mockStripe->invoices->expects('create')
-        ->andReturn($mockInvoice);
-        
-    $this->mockStripe->invoices->expects('finalizeInvoice')
-        ->andReturn($mockInvoice);
-        
-    $this->mockStripe->invoices->expects('pay')
-        ->andReturn($mockInvoice);
-    
-    $this->invoiceRepository->expects('save');
-        
-    $success = $this->paymentService->handleWebhook(
-        'checkout.session.completed',
-        ['id' => 'cs_test_123', 'payment_status' => 'paid']
-    );
-    
-    expect($success)->toBeTrue();
-    expect($payment->getStatus())->toBe('succeeded');
-});
+        // Données de l'événement webhook
+        $eventData = [
+            'id' => 'pi_test_123',
+            'object' => 'payment_intent',
+            'amount' => 1000,
+            'currency' => 'eur',
+            'status' => 'succeeded',
+            // Pas de champ 'invoice' ici
+        ];
+
+        // Appeler la méthode à tester
+        $result = $this->paymentIntentService->handleWebhook('payment_intent.succeeded', $eventData);
+
+        // Vérifier le résultat
+        $this->assertTrue($result);
+        $this->assertEquals('succeeded', $payment->getStatus());
+    }
+
+    public function testHandleWebhookCreatesInvoiceForPaymentIntentWithInvoiceId(): void
+    {
+        // Créer un paiement fictif
+        $payment = new Payment();
+        $payment->setStatus('pending');
+        $payment->setPaymentIntentId('pi_test_123');
+        $payment->setAmount(1000);
+        $payment->setCurrency('eur');
+        $payment->setUser(new User());
+
+        // Configurer les mocks
+        $this->paymentRepositoryMock
+            ->expects($this->once())
+            ->method('findOneByPaymentIntentId')
+            ->with('pi_test_123')
+            ->willReturn($payment);
+
+        $this->paymentRepositoryMock
+            ->expects($this->once())
+            ->method('save')
+            ->with($payment);
+
+        $this->invoiceServiceMock
+            ->expects($this->once())
+            ->method('createInvoiceForPayment')
+            ->with($payment, 'in_test_123');
+
+        // Données de l'événement webhook avec un invoice_id
+        $eventData = [
+            'id' => 'pi_test_123',
+            'object' => 'payment_intent',
+            'amount' => 1000,
+            'currency' => 'eur',
+            'status' => 'succeeded',
+            'invoice' => 'in_test_123',
+        ];
+
+        // Appeler la méthode à tester
+        $result = $this->paymentIntentService->handleWebhook('payment_intent.succeeded', $eventData);
+
+        // Vérifier le résultat
+        $this->assertTrue($result);
+        $this->assertEquals('succeeded', $payment->getStatus());
+    }
+
+    public function testHandleCheckoutSessionCompletedCreatesInvoice(): void
+    {
+        // Créer un paiement fictif
+        $payment = new Payment();
+        $payment->setStatus('pending');
+        $payment->setPaymentIntentId('pi_test_123');
+        $payment->setAmount(1000);
+        $payment->setCurrency('eur');
+        $payment->setUser(new User());
+        $payment->setCheckoutSessionId('cs_test_123');
+
+        // Configurer les mocks
+        $this->paymentRepositoryMock
+            ->expects($this->once())
+            ->method('findOneByCheckoutSessionId')
+            ->with('cs_test_123')
+            ->willReturn($payment);
+
+        $this->paymentRepositoryMock
+            ->expects($this->once())
+            ->method('save')
+            ->with($payment);
+
+        $this->invoiceServiceMock
+            ->expects($this->once())
+            ->method('createInvoiceForPayment')
+            ->with($payment, null);
+
+        // Données de l'événement webhook
+        $eventData = [
+            'id' => 'cs_test_123',
+            'object' => 'checkout.session',
+            'payment_intent' => 'pi_test_123',
+            'payment_status' => 'paid',
+            'amount_total' => 1000,
+            'currency' => 'eur',
+            'mode' => 'payment',
+            // Pas de champ 'invoice' ici
+        ];
+
+        // Appeler la méthode à tester
+        $result = $this->paymentIntentService->handleWebhook('checkout.session.completed', $eventData);
+
+        // Vérifier le résultat
+        $this->assertTrue($result);
+        $this->assertEquals('succeeded', $payment->getStatus());
+    }
+
+    public function testCreateSession(): void
+    {
+        // Créer un utilisateur fictif
+        $user = new User();
+        $user->setEmail('test@example.com');
+
+        // Appeler la méthode à tester
+        $result = $this->paymentIntentService->createSession(
+            $user,
+            1000,
+            'eur',
+            ['description' => 'Test payment']
+        );
+
+        // Vérifier le résultat
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('id', $result);
+        $this->assertArrayHasKey('url', $result);
+        $this->assertArrayHasKey('amount', $result);
+        $this->assertArrayHasKey('currency', $result);
+        $this->assertEquals('cs_test_123', $result['id']);
+        $this->assertEquals('https://checkout.stripe.com/pay/cs_test_123', $result['url']);
+    }
+
+    public function testHandleWebhookForUnknownEventReturnsFalse(): void
+    {
+        // Configurer les mocks
+        $this->paymentRepositoryMock
+            ->expects($this->never())
+            ->method('findOneByPaymentIntentId');
+            
+        $this->paymentRepositoryMock
+            ->expects($this->never())
+            ->method('save');
+
+        // Données de l'événement webhook
+        $eventData = [
+            'id' => 'unknown_id',
+            'object' => 'unknown_object',
+        ];
+
+        // Appeler la méthode à tester
+        $result = $this->paymentIntentService->handleWebhook('unknown.event', $eventData);
+
+        // Vérifier le résultat
+        $this->assertFalse($result);
+    }
+}

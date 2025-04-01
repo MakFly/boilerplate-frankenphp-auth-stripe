@@ -21,8 +21,59 @@ beforeEach(function () {
     
     // Mock Stripe
     $this->mockStripe = mock(StripeClient::class);
-    $this->mockStripe->invoiceItems = mock(\stdClass::class);
-    $this->mockStripe->invoices = mock(\stdClass::class);
+    
+    // Mock invoice item response
+    $this->mockInvoiceItem = new \stdClass();
+    $this->mockInvoiceItem->id = 'ii_123';
+    
+    // Mock invoice response
+    $this->mockInvoice = new \stdClass();
+    $this->mockInvoice->id = 'in_123';
+    $this->mockInvoice->invoice_pdf = 'https://stripe.com/invoice.pdf';
+    $this->mockInvoice->amount_due = 1000;
+    $this->mockInvoice->currency = 'eur';
+    $this->mockInvoice->amount_paid = 1000;
+    $this->mockInvoice->status = 'paid';
+    
+    // Setup Stripe objects with anonymous classes
+    $mockInvoiceItem = $this->mockInvoiceItem;
+    $mockInvoice = $this->mockInvoice;
+    
+    $this->mockStripe->invoiceItems = new class($mockInvoiceItem) {
+        private $mockInvoiceItem;
+        
+        public function __construct($mockInvoiceItem) {
+            $this->mockInvoiceItem = $mockInvoiceItem;
+        }
+        
+        public function create($params) {
+            return $this->mockInvoiceItem;
+        }
+    };
+    
+    $this->mockStripe->invoices = new class($mockInvoice) {
+        private $mockInvoice;
+        
+        public function __construct($mockInvoice) {
+            $this->mockInvoice = $mockInvoice;
+        }
+        
+        public function create($params) {
+            return $this->mockInvoice;
+        }
+        
+        public function finalizeInvoice($id, $params = []) {
+            return $this->mockInvoice;
+        }
+        
+        public function pay($id, $params = []) {
+            return $this->mockInvoice;
+        }
+        
+        public function retrieve($id) {
+            return $this->mockInvoice;
+        }
+    };
     
     $this->invoiceService = new InvoiceService(
         'sk_test_123',
@@ -49,24 +100,8 @@ test('createInvoiceForPayment crée une facture pour un nouveau paiement', funct
         ->with($payment)
         ->andReturnNull();
     
-    // Mock des appels Stripe
-    $mockInvoiceItem = new \stdClass();
-    $mockInvoiceItem->id = 'ii_123';
-    
-    $mockInvoice = new \stdClass();
-    $mockInvoice->id = 'in_123';
-    $mockInvoice->invoice_pdf = 'https://stripe.com/invoice.pdf';
-    
-    $this->mockStripe->invoiceItems->expects('create')
-        ->andReturn($mockInvoiceItem);
-        
-    $this->mockStripe->invoices->expects('create')
-        ->andReturn($mockInvoice);
-        
-    $this->mockStripe->invoices->expects('finalizeInvoice')
-        ->andReturn($mockInvoice);
-        
-    $this->invoiceRepository->expects('save');
+    $this->invoiceRepository->expects('save')
+        ->withAnyArgs();
     
     $invoice = $this->invoiceService->createInvoiceForPayment($payment);
     

@@ -24,16 +24,34 @@ beforeEach(function () {
     
     // Mock Stripe
     $this->mockStripe = mock(StripeClient::class);
-    $this->mockStripe->checkout = new \stdClass();
-    $this->mockStripe->checkout->sessions = mock(\stdClass::class);
     
     // Mock session response
     $this->mockSession = new \stdClass();
     $this->mockSession->id = 'cs_test_123';
     $this->mockSession->url = 'https://checkout.stripe.com/123';
     
-    $this->mockStripe->checkout->sessions->allows('create')
-        ->andReturn($this->mockSession);
+    // Setup Stripe objects with anonymous classes
+    $mockSession = $this->mockSession;
+    
+    // Create sessions mock
+    $sessions = new class($mockSession) {
+        private $mockSession;
+        
+        public function __construct($mockSession) {
+            $this->mockSession = $mockSession;
+        }
+        
+        public function create($params) {
+            return $this->mockSession;
+        }
+    };
+    
+    // Create checkout mock with sessions
+    $checkout = new \stdClass();
+    $checkout->sessions = $sessions;
+    
+    // Assign to stripe client
+    $this->mockStripe->checkout = $checkout;
 });
 
 test('createSession enregistre un paiement lors d\'un PaymentIntent', function () {
@@ -86,10 +104,10 @@ test('createSession enregistre un abonnement lors d\'une Subscription', function
     
     $subscriptionService = new SubscriptionService(
         'sk_test_123',
-        'pk_test_123',
         'http://localhost/success',
         'http://localhost/cancel',
         $this->subscriptionRepository,
+        null,
         $this->mockStripe
     );
     

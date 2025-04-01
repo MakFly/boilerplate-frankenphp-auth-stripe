@@ -44,9 +44,6 @@ parameters:
         
         # Autres erreurs spécifiques
         - '#Instanceof between Throwable and Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException will always evaluate to false#'
-        - '#Expression on left side of \?\? is not nullable#'
-        - '#Constant App\\Service\\Payment\\.*::(PAYMENT_TYPE|STATUS_PENDING) is unused#'
-        - '#Method App\\Service\\Payment\\PaymentIntentService::createInvoiceForPayment\(\) is unused#'
 
     # Configuration générale
     checkMissingIterableValueType: true

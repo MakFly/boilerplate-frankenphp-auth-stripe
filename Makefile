@@ -97,3 +97,7 @@ logs:
 
 stan:
 	@docker exec -it ${CONTAINER_NAME} ./vendor/bin/phpstan analyse src --memory-limit=1G
+
+############# Stripe webhook ###############################
+listen-webhook:
+	stripe listen --forward-to http://localhost/api/webhook/stripe

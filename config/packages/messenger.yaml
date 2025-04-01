@@ -41,9 +41,30 @@ framework:
                         type: direct
                     queues:
                         messages: ~
+            # Transport dédié aux webhooks Stripe
+            stripe_webhooks:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                retry_strategy:
+                    max_retries: 3
+                    # délai entre les tentatives: 1 minute, puis 5 minutes, puis 15 minutes
+                    delay: 60000
+                    multiplier: 5
+                    max_delay: 900000
+                options:
+                    exchange:
+                        name: stripe_webhooks
+                        type: direct
+                    queues:
+                        messages: ~
         routing:
             'App\Message\TestNotificationMessage': notifications
             'App\Message\SendNotificationMessage': notifications
+            
+            # Route les webhook Stripe vers leur transport dédié
+            # 'App\Message\StripeWebhookMessage': stripe_webhooks
+            
+            # Tout autre message asynchrone
+            # 'App\Message\AsyncMessage': async
 
 when@test:
     framework:

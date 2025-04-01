@@ -15,6 +15,12 @@ class Payment
     #[ORM\Column(length: 255)]
     private string $stripeId = '';
     
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $paymentIntentId = null;
+    
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $checkoutSessionId = null;
+    
     #[ORM\Column(length: 50)]
     private string $status = 'pending';
     
@@ -43,6 +49,9 @@ class Payment
     #[ORM\OneToOne(mappedBy: 'payment', cascade: ['persist'])]
     private ?Invoice $invoice = null;
     
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $errorMessage = null;
+    
     public function __construct()
     {
         $this->id = Uuid::v4();
@@ -63,6 +72,28 @@ class Payment
     public function setStripeId(string $stripeId): static
     {
         $this->stripeId = $stripeId;
+        return $this;
+    }
+    
+    public function getPaymentIntentId(): ?string
+    {
+        return $this->paymentIntentId;
+    }
+    
+    public function setPaymentIntentId(?string $paymentIntentId): static
+    {
+        $this->paymentIntentId = $paymentIntentId;
+        return $this;
+    }
+
+    public function getCheckoutSessionId(): ?string
+    {
+        return $this->checkoutSessionId;
+    }
+    
+    public function setCheckoutSessionId(?string $checkoutSessionId): static
+    {
+        $this->checkoutSessionId = $checkoutSessionId;
         return $this;
     }
 
@@ -156,6 +187,17 @@ class Payment
         }
 
         $this->invoice = $invoice;
+        return $this;
+    }
+    
+    public function getErrorMessage(): ?string
+    {
+        return $this->errorMessage;
+    }
+    
+    public function setErrorMessage(?string $errorMessage): static
+    {
+        $this->errorMessage = $errorMessage;
         return $this;
     }
 }

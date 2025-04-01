@@ -11,7 +11,8 @@
     "test": "docker exec boilerplate-symfony-simple php bin/console d:m:m --env=test --no-interaction && docker exec boilerplate-symfony-simple ./vendor/bin/pest",
     "phpstan": "vendor/bin/phpstan analyse",
     "check": "composer validate && npm run phpstan && npm run test",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "commitlint": "commitlint --edit"
   },
   "keywords": [],
   "author": "",

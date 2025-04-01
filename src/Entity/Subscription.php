@@ -8,6 +8,15 @@ use Symfony\Component\Uid\Uuid;
 #[ORM\Table(name: 'subscriptions')]
 class Subscription
 {
+    // Constantes de statut
+    public const STATUS_PENDING = 'pending';        // En attente, paiement non confirmé
+    public const STATUS_ACTIVE = 'active';          // Abonnement actif
+    public const STATUS_CANCELED = 'canceled';      // Abonnement annulé
+    public const STATUS_INCOMPLETE = 'incomplete';  // Processus de paiement incomplet
+    public const STATUS_PAST_DUE = 'past_due';      // Paiement en retard
+    public const STATUS_UNPAID = 'unpaid';          // Paiement échoué
+    public const STATUS_TRIALING = 'trialing';      // Période d'essai
+
     #[ORM\Id]
     #[ORM\Column(type: 'uuid')]
     private Uuid $id;
@@ -15,11 +24,17 @@ class Subscription
     #[ORM\Column(length: 255)]
     private string $stripeId = '';
     
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $stripeSubscriptionId = null;
+    
     #[ORM\Column(length: 255)]
     private string $stripePlanId = '';
     
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $stripeProductId = null;
+    
     #[ORM\Column(length: 50)]
-    private string $status = 'pending';
+    private string $status = self::STATUS_PENDING;
     
     #[ORM\Column]
     private int $amount = 0;
@@ -36,8 +51,21 @@ class Subscription
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $endDate = null;
     
+    #[ORM\Column(nullable: true)]
+    private ?\DateTimeImmutable $canceledAt = null;
+    
     #[ORM\Column]
     private bool $autoRenew = true;
+    
+    #[ORM\Column(type: 'json', nullable: true)]
+    /** @var array<string, mixed>|null */
+    private ?array $metadata = null;
+    
+    #[ORM\Column]
+    private int $retryCount = 0;
+    
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $lastErrorMessage = null;
     
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
@@ -75,6 +103,17 @@ class Subscription
         $this->stripeId = $stripeId;
         return $this;
     }
+    
+    public function getStripeSubscriptionId(): ?string
+    {
+        return $this->stripeSubscriptionId;
+    }
+    
+    public function setStripeSubscriptionId(?string $stripeSubscriptionId): static
+    {
+        $this->stripeSubscriptionId = $stripeSubscriptionId;
+        return $this;
+    }
 
     public function getStripePlanId(): string
     {
@@ -84,6 +123,17 @@ class Subscription
     public function setStripePlanId(string $stripePlanId): static
     {
         $this->stripePlanId = $stripePlanId;
+        return $this;
+    }
+    
+    public function getStripeProductId(): ?string
+    {
+        return $this->stripeProductId;
+    }
+    
+    public function setStripeProductId(?string $stripeProductId): static
+    {
+        $this->stripeProductId = $stripeProductId;
         return $this;
     }
 
@@ -96,6 +146,12 @@ class Subscription
     {
         $this->status = $status;
         $this->updatedAt = new \DateTimeImmutable();
+        
+        // Si l'abonnement est annulé, on enregistre la date d'annulation
+        if ($status === self::STATUS_CANCELED && $this->canceledAt === null) {
+            $this->canceledAt = new \DateTimeImmutable();
+        }
+        
         return $this;
     }
 
@@ -153,6 +209,17 @@ class Subscription
         $this->endDate = $endDate;
         return $this;
     }
+    
+    public function getCanceledAt(): ?\DateTimeImmutable
+    {
+        return $this->canceledAt;
+    }
+    
+    public function setCanceledAt(?\DateTimeImmutable $canceledAt): static
+    {
+        $this->canceledAt = $canceledAt;
+        return $this;
+    }
 
     public function isAutoRenew(): bool
     {
@@ -162,6 +229,46 @@ class Subscription
     public function setAutoRenew(bool $autoRenew): static
     {
         $this->autoRenew = $autoRenew;
+        return $this;
+    }
+    
+    public function getMetadata(): ?array
+    {
+        return $this->metadata;
+    }
+    
+    /** @param array<string, mixed>|null $metadata */
+    public function setMetadata(?array $metadata): static
+    {
+        $this->metadata = $metadata;
+        return $this;
+    }
+    
+    public function getRetryCount(): int
+    {
+        return $this->retryCount;
+    }
+    
+    public function setRetryCount(int $retryCount): static
+    {
+        $this->retryCount = $retryCount;
+        return $this;
+    }
+    
+    public function incrementRetryCount(): static
+    {
+        $this->retryCount++;
+        return $this;
+    }
+    
+    public function getLastErrorMessage(): ?string
+    {
+        return $this->lastErrorMessage;
+    }
+    
+    public function setLastErrorMessage(?string $lastErrorMessage): static
+    {
+        $this->lastErrorMessage = $lastErrorMessage;
         return $this;
     }
 
@@ -185,6 +292,12 @@ class Subscription
     {
         return $this->updatedAt;
     }
+    
+    public function updateTimestamps(): static
+    {
+        $this->updatedAt = new \DateTimeImmutable();
+        return $this;
+    }
 
     public function getInvoice(): ?Invoice
     {
@@ -200,5 +313,29 @@ class Subscription
 
         $this->invoice = $invoice;
         return $this;
+    }
+    
+    /**
+     * Indique si l'abonnement est actif
+     */
+    public function isActive(): bool
+    {
+        return $this->status === self::STATUS_ACTIVE;
+    }
+    
+    /**
+     * Indique si l'abonnement est en attente de paiement
+     */
+    public function isPending(): bool
+    {
+        return $this->status === self::STATUS_PENDING;
+    }
+    
+    /**
+     * Indique si l'abonnement est annulé
+     */
+    public function isCanceled(): bool
+    {
+        return $this->status === self::STATUS_CANCELED;
     }
 }
