@@ -82,9 +82,8 @@ services:
         environment:
             - ADMINER_PLUGINS=${ADM_PLUGINS}
             - ADMINER_DESIGN=${ADM_DESIGN}
+            - ADMINER_DEFAULT_DB_NAME=${ADM_DEFAULT_DB_NAME}
             - ADMINER_DEFAULT_SERVER=${ADM_DEFAULT_SERVER}
-            - ADMINER_DEFAULT_USERNAME=${ADM_DEFAULT_USERNAME}
-            - ADMINER_DEFAULT_PASSWORD=${ADM_DEFAULT_PASSWORD}
         ports:
             - "9080:8080"
         volumes:
