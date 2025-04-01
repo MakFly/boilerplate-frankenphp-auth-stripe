@@ -50,8 +50,31 @@ beforeEach(function () {
     $checkout = new \stdClass();
     $checkout->sessions = $sessions;
     
-    // Assign to stripe client
-    $this->mockStripe->checkout = $checkout;
+    // Create customers mock
+    $customers = new class {
+        public function create($params) {
+            $customer = new \stdClass();
+            $customer->id = 'cus_test_123';
+            return $customer;
+        }
+        
+        public function retrieve($customerId) {
+            $customer = new \stdClass();
+            $customer->id = $customerId;
+            $customer->deleted = false;
+            return $customer;
+        }
+    };
+    
+    // Mock getService pour retourner les différents services mockés
+    $this->mockStripe->allows('getService')
+        ->andReturnUsing(function ($name) use ($checkout, $customers) {
+            return match($name) {
+                'checkout' => $checkout,
+                'customers' => $customers,
+                default => throw new \Exception("Service $name not mocked")
+            };
+        });
 });
 
 test('createSession enregistre un paiement lors d\'un PaymentIntent', function () {
@@ -101,6 +124,7 @@ test('createSession enregistre un abonnement lors d\'une Subscription', function
     $user = new User();
     $user->setEmail('test@example.com');
     $user->setId(Uuid::v4());
+    $user->setStripeCustomerId('cus_existing_123');
     
     $subscriptionService = new SubscriptionService(
         'sk_test_123',
@@ -108,7 +132,9 @@ test('createSession enregistre un abonnement lors d\'une Subscription', function
         'http://localhost/cancel',
         $this->subscriptionRepository,
         null,
-        $this->mockStripe
+        $this->mockStripe,
+        null,
+        $this->userRepository
     );
     
     $decorator = new PaymentLoggerDecorator(

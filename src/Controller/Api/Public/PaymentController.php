@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Controller\Api\Public;
 
 use App\Attribute\DisablePayment;
+use App\Entity\User;
 use App\Repository\StripeProductsRepository;
 use App\Service\JsonRequestService;
 use App\Service\Payment\PaymentServiceFactory;
+use App\Service\Stripe\StripeService;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -26,9 +28,9 @@ class PaymentController extends AbstractController
         private readonly PaymentServiceFactory $paymentServiceFactory,
         private readonly JsonRequestService $jsonRequestService,
         private readonly ValidatorInterface $validator,
-        private readonly LoggerInterface $logger
-    ) {
-    }
+        private readonly LoggerInterface $logger,
+        private readonly StripeService $stripeService
+    ) {}
 
     #[Route('/create-payment-intent', name: 'create_payment_intent', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
@@ -36,7 +38,7 @@ class PaymentController extends AbstractController
     public function createPaymentIntent(Request $request): JsonResponse
     {
         $data = $this->jsonRequestService->getContent($request);
-        
+
         $constraints = new Assert\Collection([
             'amount' => [new Assert\NotBlank(), new Assert\Positive()],
             'currency' => [new Assert\Optional(new Assert\Currency())],
@@ -44,32 +46,51 @@ class PaymentController extends AbstractController
         ]);
 
         $errors = $this->validator->validate($data, $constraints);
-        
+
         if (count($errors) > 0) {
             return $this->json(['errors' => (string)$errors], Response::HTTP_BAD_REQUEST);
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+
+        // Vérifier que l'utilisateur a un compte Stripe
+        if (!$user->getStripeCustomerId()) {
+            $this->logger->error('Tentative de création de paiement sans compte Stripe', [
+                'user_id' => $user->getId(),
+            ]);
+            
+            return $this->json(['error' => 'Aucun compte client Stripe associé à votre profil.'], 
+                              Response::HTTP_BAD_REQUEST);
         }
 
         try {
             $filteredData = $data;
             $currency = $data['currency'] ?? 'eur';
             $metadata = $data['metadata'] ?? [];
-            
+
             if (isset($filteredData['description'])) {
                 $metadata['description'] = $filteredData['description'];
             }
-            
+
             if (isset($filteredData['product_name'])) {
                 $metadata['product_name'] = $filteredData['product_name'];
             }
-            
+
             $paymentService = $this->paymentServiceFactory->create('payment_intent');
+            
+            // Ensure type safety for static analysis
+            if (!$user instanceof User) {
+                throw new \LogicException('User must be an instance of App\Entity\User');
+            }
+            
             $sessionData = $paymentService->createSession(
-                $this->getUser(),
+                $user,
                 (int)$filteredData['amount'],
                 $currency,
                 $metadata
             );
-            
+
             return $this->json(['payment' => $sessionData]);
         } catch (\Exception $e) {
             return $this->json(['error' => $e->getMessage()], Response::HTTP_INTERNAL_SERVER_ERROR);
@@ -81,7 +102,7 @@ class PaymentController extends AbstractController
     public function createSubscription(Request $request, StripeProductsRepository $stripeProductsRepository): JsonResponse
     {
         $data = $this->jsonRequestService->getContent($request);
-        
+
         $constraints = new Assert\Collection([
             'plan_id' => [new Assert\NotBlank(), new Assert\Length(['max' => 50])],
             'success_url' => [new Assert\NotBlank(), new Assert\Url()],
@@ -111,11 +132,24 @@ class PaymentController extends AbstractController
         }
 
         $errors = $this->validator->validate($data, $constraints);
-        
+
         if (count($errors) > 0) {
             return $this->json(['errors' => (string)$errors], Response::HTTP_BAD_REQUEST);
         }
-        
+
+        /** @var User $user */
+        $user = $this->getUser();
+
+        // Vérifier que l'utilisateur a un compte Stripe
+        if (!$user->getStripeCustomerId()) {
+            $this->logger->error('Tentative de création d\'abonnement sans compte Stripe', [
+                'user_id' => $user->getId(),
+            ]);
+            
+            return $this->json(['error' => 'Aucun compte client Stripe associé à votre profil.'], 
+                              Response::HTTP_BAD_REQUEST);
+        }
+
         try {
             $currency = $data['currency'] ?? 'eur';
             $interval = $data['interval'] ?? 'month';
@@ -123,17 +157,78 @@ class PaymentController extends AbstractController
                 'price_id' => $data['price_id'],
                 'interval' => $interval,
             ];
-            
+
             $paymentService = $this->paymentServiceFactory->create('subscription');
+            
+            // Ensure type safety for static analysis
+            if (!$user instanceof User) {
+                throw new \LogicException('User must be an instance of App\Entity\User');
+            }
+            
             $sessionData = $paymentService->createSession(
-                $this->getUser(),
+                $user,
                 (int)$data['amount'],
                 $currency,
                 $metadata
             );
-            
+
             return $this->json(['subscription' => $sessionData]);
         } catch (\Exception $e) {
+            return $this->json(['error' => $e->getMessage()], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    #[Route('/billing-portal', name: 'billing_portal', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function createBillingPortalSession(Request $request): JsonResponse
+    {
+        $data = $this->jsonRequestService->getContent($request);
+
+        $constraints = new Assert\Collection([
+            'return_url' => [new Assert\NotBlank(), new Assert\Url()],
+        ]);
+
+        $errors = $this->validator->validate($data, $constraints);
+
+        if (count($errors) > 0) {
+            return $this->json(['errors' => (string)$errors], Response::HTTP_BAD_REQUEST);
+        }
+
+        /** @var User $user */
+        $user = $this->getUser();
+
+        // Vérification que l'utilisateur a bien un compte Stripe
+        if (!$user->getStripeCustomerId()) {
+            $this->logger->error('Tentative d\'accès au Billing Portal sans compte Stripe', [
+                'user_id' => $user->getId(),
+            ]);
+            
+            return $this->json(['error' => 'Aucun compte client Stripe associé à votre profil.'], 
+                              Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $this->logger->info('Création d\'une session Stripe Billing Portal', [
+                'user_id' => $user->getId(),
+            ]);
+
+            $session = $this->stripeService->createBillingPortalSession(
+                $user->getStripeCustomerId(),
+                $data['return_url']
+            );
+
+            $this->logger->debug('Session Stripe Billing Portal créée', [
+                'session_id' => $session['id'],
+                'url' => $session['url']
+            ]);
+
+            return $this->json(['url' => $session['url']]);
+        } catch (\Exception $e) {
+            $this->logger->error('Erreur lors de la création de la session Stripe Billing Portal', [
+                'error' => $e->getMessage(),
+                'user_id' => $user->getId(),
+            ]);
+
             return $this->json(['error' => $e->getMessage()], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }

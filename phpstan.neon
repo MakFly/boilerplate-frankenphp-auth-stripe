@@ -17,7 +17,6 @@ parameters:
         - '#Call to an undefined method App\\Entity\\User::getName\(\)#'
         
         # Problèmes de compatibilité UserInterface vs User
-        - '#Parameter \#1 \$user of method App\\Interface\\PaymentServiceInterface::createSession\(\) expects App\\Entity\\User, Symfony\\Component\\Security\\Core\\User\\UserInterface(\|null)? given#'
         - '#Parameter \#1 \$user of method App\\Entity\\UserJit::setUser\(\) expects App\\Entity\\User, Symfony\\Component\\Security\\Core\\User\\UserInterface given#'
         
         # Problèmes d'accès aux offsets

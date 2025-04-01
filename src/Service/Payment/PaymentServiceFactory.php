@@ -72,7 +72,8 @@ final class PaymentServiceFactory
                 $this->subscriptionRepository,
                 $this->invoiceService,
                 null,
-                $this->logger
+                $this->logger,
+                $this->userRepository
             ),
             default => throw new \InvalidArgumentException("Type de service de paiement non reconnu: $type"),
         };

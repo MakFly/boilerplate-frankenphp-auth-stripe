@@ -42,8 +42,31 @@ beforeEach(function () {
     $checkout = new \stdClass();
     $checkout->sessions = $sessions;
     
-    // Assign to stripe client
-    $this->mockStripe->checkout = $checkout;
+    // Create customers mock
+    $customers = new class {
+        public function create($params) {
+            $customer = new \stdClass();
+            $customer->id = 'cus_test_123';
+            return $customer;
+        }
+        
+        public function retrieve($customerId) {
+            $customer = new \stdClass();
+            $customer->id = $customerId;
+            $customer->deleted = false;
+            return $customer;
+        }
+    };
+    
+    // Mock getService pour retourner les différents services mockés
+    $this->mockStripe->allows('getService')
+        ->andReturnUsing(function ($name) use ($checkout, $customers) {
+            return match($name) {
+                'checkout' => $checkout,
+                'customers' => $customers,
+                default => throw new \Exception("Service $name not mocked")
+            };
+        });
     
     $this->service = new SubscriptionService(
         'sk_test_123',

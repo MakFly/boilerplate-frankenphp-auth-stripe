@@ -8,11 +8,13 @@ use App\Entity\Subscription;
 use App\Entity\User;
 use App\Interface\PaymentServiceInterface;
 use App\Repository\SubscriptionRepository;
+use App\Repository\UserRepository;
 use App\Service\Invoice\InvoiceService;
 use Psr\Log\LoggerInterface;
 use Stripe\Exception\ApiErrorException;
 use Stripe\StripeClient;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+
 final readonly class SubscriptionService implements PaymentServiceInterface
 {
     private const STATUS_PENDING = 'pending';
@@ -35,7 +37,8 @@ final readonly class SubscriptionService implements PaymentServiceInterface
         private SubscriptionRepository $subscriptionRepository,
         private ?InvoiceService $invoiceService = null,
         private ?StripeClient $stripeClient = null,
-        private ?LoggerInterface $logger = null
+        private ?LoggerInterface $logger = null,
+        private ?UserRepository $userRepository = null
     ) {
         $this->stripe = $stripeClient ?? new StripeClient($this->stripeSecretKey);
     }
@@ -54,10 +57,24 @@ final readonly class SubscriptionService implements PaymentServiceInterface
                 'currency' => $currency
             ]);
 
+            // retrieve customer on stripe with $user->getStripeCustomerId()
+            $customer = $this->stripe->customers->retrieve($user->getStripeCustomerId());
+            
+            if (!$customer || isset($customer->deleted) && $customer->deleted) {
+                // create customer on stripe
+                $customer = $this->stripe->customers->create([
+                    'email' => $user->getEmail(),
+                    'name' => $user->getUsername(),
+                ]);
+
+                $user->setStripeCustomerId($customer->id);
+                $this->userRepository->save($user);
+            }
+            
             // Création d'une session Stripe Checkout en mode subscription
             $session = $this->stripe->checkout->sessions->create([
                 'payment_method_types' => ['card'],
-                'customer_email' => $user->getEmail(),
+                'customer' => $customer->id,
                 'line_items' => [
                     [
                         'price' => $metadata['price_id'],
@@ -436,6 +453,80 @@ final readonly class SubscriptionService implements PaymentServiceInterface
             'unpaid' => self::STATUS_UNPAID,
             default => self::STATUS_PENDING
         };
+    }
+    
+    /**
+     * Trouve les abonnements restés en pending avant une date donnée
+     * 
+     * @param \DateTimeInterface $date Date limite
+     * @return array<Subscription> Abonnements en pending
+     */
+    public function findPendingSubscriptionsBeforeDate(\DateTimeInterface $date): array
+    {
+        return $this->subscriptionRepository->findPendingBeforeDate($date);
+    }
+    
+    /**
+     * Nettoie les abonnements restés en pending trop longtemps
+     * 
+     * @param int $hours Nombre d'heures après lequel un abonnement pending est considéré comme abandonné
+     * @return int Nombre d'abonnements nettoyés
+     */
+    public function cleanPendingSubscriptions(int $hours = 24): int
+    {
+        $cutoffDate = new \DateTimeImmutable('now - ' . $hours . ' hours');
+        $pendingSubscriptions = $this->subscriptionRepository->findPendingBeforeDate($cutoffDate);
+        
+        $cleanedCount = 0;
+        
+        foreach ($pendingSubscriptions as $subscription) {
+            // Vérifier si une session Stripe existe toujours
+            $stripeId = $subscription->getStripeId();
+            
+            if ($stripeId) {
+                try {
+                    // Vérifier l'état de la session Stripe
+                    $session = $this->stripe->checkout->sessions->retrieve($stripeId);
+                    
+                    if ($session->status === 'complete') {
+                        // La session a été complétée mais notre webhook a échoué
+                        $subscription->setStatus(self::STATUS_INCOMPLETE);
+                        $this->subscriptionRepository->save($subscription);
+                        $this->logger?->info('Session complétée mais non traitée, marquée comme incomplete', [
+                            'subscription_id' => $subscription->getId(),
+                            'stripe_id' => $stripeId
+                        ]);
+                        continue;
+                    } elseif ($session->status === 'open') {
+                        // Session toujours active, mais trop ancienne
+                        $subscription->setStatus(self::STATUS_CANCELED);
+                        $subscription->setCanceledAt(new \DateTimeImmutable());
+                        $this->subscriptionRepository->save($subscription);
+                        $cleanedCount++;
+                    }
+                } catch (\Exception $e) {
+                    // Session non trouvée ou autre erreur
+                    $subscription->setStatus(self::STATUS_CANCELED);
+                    $subscription->setCanceledAt(new \DateTimeImmutable());
+                    $subscription->setLastErrorMessage($e->getMessage());
+                    $this->subscriptionRepository->save($subscription);
+                    $cleanedCount++;
+                }
+            } else {
+                // Pas de session Stripe associée, annuler l'abonnement
+                $subscription->setStatus(self::STATUS_CANCELED);
+                $subscription->setCanceledAt(new \DateTimeImmutable());
+                $this->subscriptionRepository->save($subscription);
+                $cleanedCount++;
+            }
+        }
+        
+        $this->logger?->info('Nettoyage des abonnements pending terminé', [
+            'cleaned_count' => $cleanedCount,
+            'total_checked' => count($pendingSubscriptions)
+        ]);
+        
+        return $cleanedCount;
     }
     
     /**

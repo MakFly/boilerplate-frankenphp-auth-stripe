@@ -95,6 +95,7 @@ jobs:
       MAILER_SENDER_ADDRESS: no-reply@example.com
       TOKEN_TTL: 3600
       APP_OTP_ENABLED: false
+      STRIPE_SECRET_KEY:
     steps:
       - uses: actions/checkout@v4
 

@@ -47,6 +47,11 @@ services:
         arguments:
             $mailerFrom: '%env(MAILER_SENDER_ADDRESS)%'
             
+    # Configuration du service Stripe avec cache
+    App\Service\Stripe\StripeService:
+        arguments:
+            $cache: '@cache.app'
+            
     # Alias pour NotifierInterface (utilisé par AuthService)
     App\Interface\NotifierInterface: '@App\Service\Notifier\EmailNotifier'
 

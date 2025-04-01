@@ -28,29 +28,32 @@ final readonly class PaymentRouteListener
     {
         $request = $event->getRequest();
         
-        // Vérifie si la route commence par /api/payment/
-        if (!str_starts_with($request->getPathInfo(), '/api/payment/')) {
-            return;
+        // Vérifier si l'utilisateur a un compte Stripe pour les routes de paiement
+        // Si la route n'est pas liée au paiement, on quitte la méthode
+        if (str_starts_with($request->getPathInfo(), '/api/payment/')) {
+            /** @var User|null $user */
+            $user = $this->security->getUser();
+            
+            if (!$user) {
+                $event->setResponse(new JsonResponse(
+                    ['message' => 'Utilisateur non authentifié'],
+                    Response::HTTP_UNAUTHORIZED
+                ));
+                return;
+            }
+    
+            $stripeCustomerId = $user->getStripeCustomerId();
+            
+            if (!$stripeCustomerId) {
+                $this->stripeService->createStripeAccount($user);
+                return;
+            }
+    
+            // Vérifier que le stripeCustomerId est associé à son compte Stripe
+            if (!$this->stripeService->getStripeAccount($stripeCustomerId)) {
+                $this->stripeService->updateStripeAccount($user);
+            }
         }
 
-        /** @var User|null $user */
-        $user = $this->security->getUser();
-        
-        if (!$user) {
-            $event->setResponse(new JsonResponse(
-                ['message' => 'Utilisateur non authentifié'],
-                Response::HTTP_UNAUTHORIZED
-            ));
-            return;
-        }
-
-        if (!$user->getStripeCustomerId()) {
-            $this->logger->error('User without Stripe account', [
-                'user_id' => $user->getId(),
-            ]);
-
-            $this->stripeService->createStripeAccount($user);
-            return;
-        }
     }
 }

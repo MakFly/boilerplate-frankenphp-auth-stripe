@@ -91,4 +91,22 @@ class SubscriptionRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+    
+    /**
+     * Trouve tous les abonnements en attente créés avant une date donnée
+     * 
+     * @param \DateTimeInterface $date La date limite
+     * @return array<Subscription> Liste des abonnements en attente
+     */
+    public function findPendingBeforeDate(\DateTimeInterface $date): array
+    {
+        return $this->createQueryBuilder('s')
+            ->where('s.status = :status')
+            ->andWhere('s.createdAt < :date')
+            ->setParameter('status', 'pending')
+            ->setParameter('date', $date)
+            ->orderBy('s.createdAt', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
 }
