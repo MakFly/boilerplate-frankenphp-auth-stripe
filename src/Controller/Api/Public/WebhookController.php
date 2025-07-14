@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Controller\Api\Public;
 
 use App\Entity\StripeWebhookLog;
-use App\Service\Invoice\InvoiceService;
-use App\Service\Payment\PaymentServiceFactory;
 use App\Service\Webhook\WebhookProcessor;
+use App\Service\Webhook\WebhookStatusService;
 use Psr\Log\LoggerInterface;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\Webhook;
@@ -23,13 +22,9 @@ class WebhookController extends AbstractController
     public function __construct(
         #[Autowire('%env(STRIPE_WEBHOOK_SECRET)%')]
         private readonly string $stripeWebhookSecret,
-        #[Autowire('%env(STRIPE_CANCEL_URL)%')]
-        private readonly string $stripeCancelUrl,
-        private readonly PaymentServiceFactory $paymentServiceFactory,
         private readonly LoggerInterface $logger,
         private readonly WebhookProcessor $webhookProcessor,
-        private readonly \Doctrine\ORM\EntityManagerInterface $entityManager,
-        private readonly ?InvoiceService $invoiceService = null,
+        private readonly WebhookStatusService $webhookStatusService,
     ) {
     }
     
@@ -78,13 +73,11 @@ class WebhookController extends AbstractController
                 ]);
                 
                 // Pour les webhooks checkout.session.completed en erreur, retourner une réponse spéciale
-                // que le front-end peut intercepter
                 if ($event->type === 'checkout.session.completed') {
-                    return new JsonResponse([
-                        'status' => 'error',
-                        'message' => 'Une erreur est survenue lors du traitement du paiement',
-                        'redirect_url' => $this->stripeCancelUrl
-                    ], Response::HTTP_OK); // HTTP 200 car Stripe attend un succès
+                    return new JsonResponse(
+                        $this->webhookStatusService->getErrorRedirectResponse($event->type),
+                        Response::HTTP_OK
+                    );
                 }
             } else {
                 $this->logger->info('Webhook traité avec succès', [
@@ -103,12 +96,10 @@ class WebhookController extends AbstractController
             ]);
             
             // Même en cas d'erreur, renvoyer un succès à Stripe mais avec des données JSON
-            // que le front peut intercepter
-            return new JsonResponse([
-                'status' => 'error',
-                'message' => 'Une erreur est survenue lors du traitement du paiement',
-                'redirect_url' => $this->stripeCancelUrl
-            ], Response::HTTP_OK); // HTTP 200 car Stripe attend un succès
+            return new JsonResponse(
+                $this->webhookStatusService->getErrorRedirectResponse('general'),
+                Response::HTTP_OK
+            );
         }
     }
     
@@ -121,56 +112,19 @@ class WebhookController extends AbstractController
             return new JsonResponse(['status' => 'error', 'message' => 'Session ID requis'], Response::HTTP_BAD_REQUEST);
         }
         
-        // Rechercher dans la base de données le webhook associé à cette session
         try {
-            $webhook = $this->entityManager->getRepository(StripeWebhookLog::class)
-                ->createQueryBuilder('w')
-                ->where('w.payload LIKE :sessionId')
-                ->setParameter('sessionId', '%"id":"' . $sessionId . '"%')
-                ->orderBy('w.createdAt', 'DESC')
-                ->setMaxResults(1)
-                ->getQuery()
-                ->getOneOrNullResult();
-            
-            if (!$webhook) {
-                // Webhook non trouvé - peut être en attente de traitement
-                return new JsonResponse([
-                    'status' => 'pending',
-                    'message' => 'Paiement en cours de traitement'
-                ]);
-            }
-            
-            // Vérifier le statut du webhook
-            if ($webhook->getStatus() === StripeWebhookLog::STATUS_SUCCESS) {
-                return new JsonResponse([
-                    'status' => 'success',
-                    'message' => 'Paiement traité avec succès'
-                ]);
-            } elseif ($webhook->getStatus() === StripeWebhookLog::STATUS_ERROR) {
-                return new JsonResponse([
-                    'status' => 'error',
-                    'message' => 'Une erreur est survenue lors du traitement du paiement',
-                    'error_details' => $webhook->getErrorMessage(),
-                    'redirect_url' => $this->stripeCancelUrl
-                ]);
-            } else {
-                // En cours de traitement ou ignoré
-                return new JsonResponse([
-                    'status' => $webhook->getStatus(),
-                    'message' => 'Paiement en cours de traitement'
-                ]);
-            }
+            $statusData = $this->webhookStatusService->checkWebhookStatusBySessionId($sessionId);
+            return new JsonResponse($statusData);
         } catch (\Exception $e) {
             $this->logger->error('Erreur lors de la vérification du statut du webhook', [
                 'session_id' => $sessionId,
                 'error' => $e->getMessage()
             ]);
             
-            return new JsonResponse([
-                'status' => 'error',
-                'message' => 'Erreur lors de la vérification du statut',
-                'redirect_url' => $this->stripeCancelUrl
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            return new JsonResponse(
+                $this->webhookStatusService->getErrorRedirectResponse('status_check'),
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
     }
 }

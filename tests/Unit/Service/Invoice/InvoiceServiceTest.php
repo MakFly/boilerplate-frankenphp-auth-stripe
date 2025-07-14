@@ -7,10 +7,12 @@ namespace Tests\Unit\Service\Invoice;
 use App\Entity\Invoice;
 use App\Entity\Payment;
 use App\Entity\User;
+use App\Interface\Stripe\StripeInvoiceServiceInterface;
 use App\Repository\InvoiceRepository;
 use App\Repository\PaymentRepository;
 use App\Repository\SubscriptionRepository;
 use App\Service\Invoice\InvoiceService;
+use Stripe\Invoice as StripeInvoice;
 use Stripe\StripeClient;
 use Symfony\Component\Uid\Uuid;
 
@@ -18,6 +20,7 @@ beforeEach(function () {
     $this->invoiceRepository = mock(InvoiceRepository::class);
     $this->paymentRepository = mock(PaymentRepository::class);
     $this->subscriptionRepository = mock(SubscriptionRepository::class);
+    $this->stripeInvoiceService = mock(StripeInvoiceServiceInterface::class);
     
     // Mock Stripe
     $this->mockStripe = mock(StripeClient::class);
@@ -26,14 +29,16 @@ beforeEach(function () {
     $this->mockInvoiceItem = new \stdClass();
     $this->mockInvoiceItem->id = 'ii_123';
     
-    // Mock invoice response
-    $this->mockInvoice = new \stdClass();
-    $this->mockInvoice->id = 'in_123';
-    $this->mockInvoice->invoice_pdf = 'https://stripe.com/invoice.pdf';
-    $this->mockInvoice->amount_due = 1000;
-    $this->mockInvoice->currency = 'eur';
-    $this->mockInvoice->amount_paid = 1000;
-    $this->mockInvoice->status = 'paid';
+    // Utilise une vraie instance Stripe\Invoice (hydratée via refreshFrom)
+    $this->mockInvoice = new \Stripe\Invoice();
+    $this->mockInvoice->refreshFrom([
+        'id' => 'in_123',
+        'invoice_pdf' => 'https://stripe.com/invoice.pdf',
+        'amount_due' => 1000,
+        'currency' => 'eur',
+        'amount_paid' => 1000,
+        'status' => 'paid',
+    ], null);
     
     // Setup Stripe objects with anonymous classes
     $mockInvoiceItem = $this->mockInvoiceItem;
@@ -76,11 +81,10 @@ beforeEach(function () {
     };
     
     $this->invoiceService = new InvoiceService(
-        'sk_test_123',
         $this->invoiceRepository,
         $this->paymentRepository,
         $this->subscriptionRepository,
-        $this->mockStripe
+        $this->stripeInvoiceService
     );
 });
 
@@ -99,6 +103,10 @@ test('createInvoiceForPayment crée une facture pour un nouveau paiement', funct
     $this->invoiceRepository->expects('findByPayment')
         ->with($payment)
         ->andReturnNull();
+    
+    $this->stripeInvoiceService->expects('createStripeInvoiceForPayment')
+        ->with($payment)
+        ->andReturn($this->mockInvoice);
     
     $this->invoiceRepository->expects('save')
         ->withAnyArgs();
@@ -136,6 +144,10 @@ test('createInvoiceForPayment échoue si l\'utilisateur n\'a pas de Stripe Custo
         ->with($payment)
         ->andReturnNull();
     
+    $this->stripeInvoiceService->expects('createStripeInvoiceForPayment')
+        ->with($payment)
+        ->andThrow(new \RuntimeException('User must have a Stripe customer ID to create an invoice.'));
+    
     expect(fn() => $this->invoiceService->createInvoiceForPayment($payment))
-        ->toThrow(\RuntimeException::class, 'L\'utilisateur doit avoir un customer ID Stripe pour créer une facture.');
+        ->toThrow(\RuntimeException::class, 'Error creating invoice: User must have a Stripe customer ID to create an invoice.');
 });

@@ -8,14 +8,40 @@ use App\Entity\User;
 use App\Enum\AuthProvider;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Google_Client;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Security\Core\Exception\UserNotFoundException;
 
-class GoogleSsoService
+final readonly class GoogleSsoService
 {
+    private Google_Client $googleClient;
+
     public function __construct(
-        private readonly UserRepository $userRepository,
-        private readonly EntityManagerInterface $entityManager,
-    ) {}
+        private UserRepository $userRepository,
+        private EntityManagerInterface $entityManager,
+        private TokenAuthenticator $tokenAuthenticator,
+        #[Autowire(env: 'GOOGLE_CLIENT_ID')]
+        private string $googleClientId,
+    ) {
+        $this->googleClient = new Google_Client(['client_id' => $this->googleClientId]);
+    }
+
+    public function authenticateWithGoogle(string $idToken): array
+    {
+        $payload = $this->verifyIdToken($idToken);
+        if (!$payload) {
+            throw new \RuntimeException('Token invalide');
+        }
+
+        $user = $this->handleNormalAuthentication($payload['sub'], $payload);
+        
+        return $this->tokenAuthenticator->createAuthenticationToken($user);
+    }
+
+    public function verifyIdToken(string $idToken): ?array
+    {
+        return $this->googleClient->verifyIdToken($idToken);
+    }
 
     /**
      * @param array{sub: string, email: string} $googleData Les données de l'utilisateur Google

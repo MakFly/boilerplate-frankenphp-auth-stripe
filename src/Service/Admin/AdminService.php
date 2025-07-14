@@ -6,18 +6,16 @@ namespace App\Service\Admin;
 
 use App\Repository\UserRepository;
 use App\Entity\User;
-use Doctrine\ORM\EntityManagerInterface;
 
 final class AdminService
 {
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
         private readonly UserRepository $userRepository,
     ) {
     }
 
     /**
-     * Récupère les statistiques globales pour le dashboard admin
+     * Retrieves global statistics for admin dashboard
      */
     public function getDashboardStats(): array
     {
@@ -33,7 +31,7 @@ final class AdminService
     }
 
     /**
-     * Vérifie si un utilisateur a des accès administrateur
+     * Checks if user has admin access
      */
     public function hasAdminAccess(User $user): bool
     {
@@ -41,10 +39,10 @@ final class AdminService
     }
 
     /**
-     * Recherche des utilisateurs avec filtres
+     * Searches users with filters
      * 
-     * @param array<string, string> $criteria Les critères de recherche
-     * @return array<int, User> La liste des utilisateurs correspondants
+     * @param array<string, string> $criteria Search criteria
+     * @return array<int, User> List of matching users
      */
     public function searchUsers(array $criteria): array
     {
@@ -61,5 +59,59 @@ final class AdminService
         }
 
         return $qb->getQuery()->getResult();
+    }
+
+    /**
+     * Retrieves all users
+     */
+    public function getAllUsers(): array
+    {
+        return $this->userRepository->findAll();
+    }
+
+    /**
+     * Finds user by ID
+     */
+    public function findUserById(string $id): ?User
+    {
+        return $this->userRepository->find($id);
+    }
+
+    /**
+     * Promotes user to admin role
+     */
+    public function promoteUserToAdmin(string $userId): bool
+    {
+        $user = $this->findUserById($userId);
+        
+        if (!$user) {
+            return false;
+        }
+
+        $roles = $user->getRoles();
+        if (!in_array('ROLE_ADMIN', $roles)) {
+            $user->setRoles(array_merge($roles, ['ROLE_ADMIN']));
+            $this->userRepository->save($user, true);
+        }
+
+        return true;
+    }
+
+    /**
+     * Removes admin role from user
+     */
+    public function demoteUserFromAdmin(string $userId): bool
+    {
+        $user = $this->findUserById($userId);
+        
+        if (!$user) {
+            return false;
+        }
+
+        $roles = array_diff($user->getRoles(), ['ROLE_ADMIN']);
+        $user->setRoles($roles);
+        $this->userRepository->save($user, true);
+
+        return true;
     }
 }

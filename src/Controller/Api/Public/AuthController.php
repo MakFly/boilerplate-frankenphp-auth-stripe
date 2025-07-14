@@ -12,7 +12,7 @@ use App\DTO\Response\ApiResponse;
 use App\Entity\User;
 use App\Enum\ApiMessage;
 use App\Exception\Auth\RegistrationException;
-use App\Interface\AuthInterface;
+use App\Interface\Auth\AuthInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Google_Client;
 use Psr\Log\LoggerInterface;

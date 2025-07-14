@@ -35,56 +35,89 @@ final readonly class PaymentIntentService implements PaymentServiceInterface
 
     public function createSession(User $user, int $amount, string $currency = 'eur', array $metadata = []): array
     {
+        $this->logSessionCreation($user, $amount, $currency);
+
         try {
-            $this->logger?->info('Création d\'une session de paiement', [
-                'user_id' => $user->getId(),
-                'amount' => $amount,
-                'currency' => $currency
-            ]);
-
-            // Création d'une session Stripe Checkout en mode payment
-            $session = $this->stripe->checkout->sessions->create([
-                'payment_method_types' => ['card'],
-                'customer_email' => $user->getEmail(),
-                'line_items' => [
-                    [
-                        'price_data' => [
-                            'currency' => $currency,
-                            'product_data' => [
-                                'name' => $metadata['product_name'] ?? 'Paiement',
-                                'description' => $metadata['description'] ?? null,
-                            ],
-                            'unit_amount' => $amount, // Montant en centimes
-                        ],
-                        'quantity' => 1,
-                    ],
-                ],
-                'mode' => 'payment',
-                'metadata' => array_merge($metadata, [
-                    'user_id' => $user->getId(),
-                ]),
-                'success_url' => $this->successUrl,
-                'cancel_url' => $this->cancelUrl,
-            ]);
-
-            $this->logger?->debug('Session de paiement créée', [
-                'session_id' => $session->id,
-                'url' => $session->url
-            ]);
-
-            return [
-                'id' => $session->id,
-                'url' => $session->url,
-                'amount' => $amount,
-                'currency' => $currency,
-            ];
+            $session = $this->createStripeSession($user, $amount, $currency, $metadata);
+            $this->logSessionSuccess($session);
+            
+            return $this->formatSessionResponse($session, $amount, $currency);
         } catch (ApiErrorException $e) {
-            $this->logger?->error('Erreur lors de la création de la session de paiement', [
-                'error' => $e->getMessage(),
-                'user_id' => $user->getId()
-            ]);
+            $this->logSessionError($e, $user);
             throw new \RuntimeException('Erreur lors de la création de la session de paiement: ' . $e->getMessage());
         }
+    }
+
+    private function logSessionCreation(User $user, int $amount, string $currency): void
+    {
+        $this->logger?->info('Création d\'une session de paiement', [
+            'user_id' => $user->getId(),
+            'amount' => $amount,
+            'currency' => $currency
+        ]);
+    }
+
+    private function createStripeSession(User $user, int $amount, string $currency, array $metadata): object
+    {
+        return $this->stripe->checkout->sessions->create([
+            'payment_method_types' => ['card'],
+            'customer_email' => $user->getEmail(),
+            'line_items' => $this->buildLineItems($amount, $currency, $metadata),
+            'mode' => 'payment',
+            'metadata' => $this->buildMetadata($metadata, $user),
+            'success_url' => $this->successUrl,
+            'cancel_url' => $this->cancelUrl,
+        ]);
+    }
+
+    private function buildLineItems(int $amount, string $currency, array $metadata): array
+    {
+        return [
+            [
+                'price_data' => [
+                    'currency' => $currency,
+                    'product_data' => [
+                        'name' => $metadata['product_name'] ?? 'Paiement',
+                        'description' => $metadata['description'] ?? null,
+                    ],
+                    'unit_amount' => $amount,
+                ],
+                'quantity' => 1,
+            ],
+        ];
+    }
+
+    private function buildMetadata(array $metadata, User $user): array
+    {
+        return array_merge($metadata, [
+            'user_id' => $user->getId(),
+        ]);
+    }
+
+    private function logSessionSuccess(object $session): void
+    {
+        $this->logger?->debug('Session de paiement créée', [
+            'session_id' => $session->id,
+            'url' => $session->url
+        ]);
+    }
+
+    private function formatSessionResponse(object $session, int $amount, string $currency): array
+    {
+        return [
+            'id' => $session->id,
+            'url' => $session->url,
+            'amount' => $amount,
+            'currency' => $currency,
+        ];
+    }
+
+    private function logSessionError(ApiErrorException $e, User $user): void
+    {
+        $this->logger?->error('Erreur lors de la création de la session de paiement', [
+            'error' => $e->getMessage(),
+            'user_id' => $user->getId()
+        ]);
     }
 
     /**
@@ -96,24 +129,30 @@ final readonly class PaymentIntentService implements PaymentServiceInterface
      */
     public function handleWebhook(string $eventType, array $eventData): bool
     {
-        $this->logger->info('Traitement d\'un webhook pour payment intent', [
+        $this->logWebhookProcessing($eventType, $eventData);
+
+        $payment = $this->processWebhookEvent($eventType, $eventData);
+
+        return $payment !== null;
+    }
+
+    private function logWebhookProcessing(string $eventType, array $eventData): void
+    {
+        $this->logger?->info('Traitement d\'un webhook pour payment intent', [
             'event_type' => $eventType,
             'data' => $eventData,
         ]);
+    }
 
-        $payment = null;
-
-        // Traiter l'événement avec la méthode appropriée
-        $payment = match ($eventType) {
+    private function processWebhookEvent(string $eventType, array $eventData): ?Payment
+    {
+        return match ($eventType) {
             'checkout.session.completed' => $this->handleCheckoutSessionCompleted($eventData),
             'payment_intent.succeeded' => $this->handlePaymentIntentSucceeded($eventData),
             'payment_intent.payment_failed' => $this->handlePaymentIntentFailed($eventData),
             'invoice.payment_succeeded' => $this->handleInvoicePaymentSucceeded($eventData),
             default => null,
         };
-
-        // Si on a réussi à traiter le paiement, retourner true
-        return $payment !== null;
     }
 
     /**
@@ -125,65 +164,90 @@ final readonly class PaymentIntentService implements PaymentServiceInterface
         $sessionId = $eventData['id'] ?? null;
         $paymentIntentId = $eventData['payment_intent'] ?? null;
 
-        if (!$sessionId || !$paymentIntentId) {
-            $this->logger->warning('Webhook checkout.session.completed sans session ID ou payment intent ID', [
-                'session_id' => $sessionId,
-                'payment_intent_id' => $paymentIntentId,
-            ]);
+        if (!$this->validateCheckoutSessionData($sessionId, $paymentIntentId)) {
             return null;
         }
 
-        // Vérifier si nous avons déjà un paiement associé à cette session
+        $payment = $this->findPaymentBySessionOrIntent($sessionId, $paymentIntentId);
+        if (!$payment) {
+            return null;
+        }
+
+        $this->updatePaymentIntentId($payment, $paymentIntentId);
+        $this->updatePaymentStatus($payment, $eventData);
+        $this->tryCreateInvoice($payment, $eventData);
+
+        $this->paymentRepository->save($payment);
+        return $payment;
+    }
+
+    private function validateCheckoutSessionData(?string $sessionId, ?string $paymentIntentId): bool
+    {
+        if (!$sessionId || !$paymentIntentId) {
+            $this->logger?->warning('Webhook checkout.session.completed sans session ID ou payment intent ID', [
+                'session_id' => $sessionId,
+                'payment_intent_id' => $paymentIntentId,
+            ]);
+            return false;
+        }
+        return true;
+    }
+
+    private function findPaymentBySessionOrIntent(string $sessionId, string $paymentIntentId): ?Payment
+    {
         $payment = $this->paymentRepository->findOneByCheckoutSessionId($sessionId);
 
         if (!$payment) {
-            $this->logger->warning('Aucun paiement trouvé pour la session de checkout', [
+            $this->logger?->warning('Aucun paiement trouvé pour la session de checkout', [
                 'session_id' => $sessionId
             ]);
 
-            // Essayer de trouver par payment_intent_id
             $payment = $this->paymentRepository->findOneByPaymentIntentId($paymentIntentId);
 
             if (!$payment) {
-                $this->logger->warning('Aucun paiement trouvé pour le payment intent', [
+                $this->logger?->warning('Aucun paiement trouvé pour le payment intent', [
                     'payment_intent_id' => $paymentIntentId
                 ]);
                 return null;
             }
         }
 
-        // Mettre à jour le payment intent ID si nécessaire
+        return $payment;
+    }
+
+    private function updatePaymentIntentId(Payment $payment, string $paymentIntentId): void
+    {
         if (!$payment->getPaymentIntentId()) {
             $payment->setPaymentIntentId($paymentIntentId);
         }
+    }
 
-        // Mettre à jour le statut du paiement en fonction de l'état de la session
+    private function updatePaymentStatus(Payment $payment, array $eventData): void
+    {
         $paymentStatus = $eventData['payment_status'] ?? null;
-        if ($paymentStatus === 'paid') {
-            $payment->setStatus('succeeded');
+        $status = ($paymentStatus === 'paid') ? 'succeeded' : 'pending';
+        $payment->setStatus($status);
+    }
 
-            // Créer une facture pour ce paiement si nécessaire
-            if ($this->invoiceService) {
-                try {
-                    $stripeInvoiceId = $eventData['invoice'] ?? null;
-                    $this->invoiceService->createInvoiceForPayment($payment, $stripeInvoiceId);
-                    $this->logger->info('Facture créée pour le paiement', [
-                        'payment_id' => $payment->getId()->toRfc4122(),
-                        'stripe_invoice_id' => $stripeInvoiceId,
-                    ]);
-                } catch (\Exception $e) {
-                    $this->logger->error('Erreur lors de la création de la facture pour le paiement', [
-                        'payment_id' => $payment->getId()->toRfc4122(),
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
-        } else {
-            $payment->setStatus('pending');
+    private function tryCreateInvoice(Payment $payment, array $eventData): void
+    {
+        if (!$this->invoiceService || $payment->getStatus() !== 'succeeded') {
+            return;
         }
 
-        $this->paymentRepository->save($payment);
-        return $payment;
+        try {
+            $stripeInvoiceId = $eventData['invoice'] ?? null;
+            $this->invoiceService->createInvoiceForPayment($payment, $stripeInvoiceId);
+            $this->logger?->info('Facture créée pour le paiement', [
+                'payment_id' => $payment->getId()->toRfc4122(),
+                'stripe_invoice_id' => $stripeInvoiceId,
+            ]);
+        } catch (\Exception $e) {
+            $this->logger?->error('Erreur lors de la création de la facture pour le paiement', [
+                'payment_id' => $payment->getId()->toRfc4122(),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -195,47 +259,43 @@ final readonly class PaymentIntentService implements PaymentServiceInterface
         $paymentIntentId = $eventData['id'] ?? null;
 
         if (!$paymentIntentId) {
-            $this->logger->warning('Webhook payment_intent.succeeded sans payment intent ID');
+            $this->logger?->warning('Webhook payment_intent.succeeded sans payment intent ID');
             return null;
         }
 
-        // Rechercher le paiement associé à ce payment intent
+        $payment = $this->findPaymentByIntentId($paymentIntentId);
+        if (!$payment) {
+            return null;
+        }
+
+        $this->updatePaymentToSucceeded($payment, $paymentIntentId);
+        $this->tryCreateInvoice($payment, $eventData);
+
+        return $payment;
+    }
+
+    private function findPaymentByIntentId(string $paymentIntentId): ?Payment
+    {
         $payment = $this->paymentRepository->findOneByPaymentIntentId($paymentIntentId);
 
         if (!$payment) {
-            $this->logger->warning('Aucun paiement trouvé pour le payment intent', [
+            $this->logger?->warning('Aucun paiement trouvé pour le payment intent', [
                 'payment_intent_id' => $paymentIntentId
             ]);
-            return null;
-        }
-
-        // Mettre à jour le statut
-        $payment->setStatus('succeeded');
-        $this->paymentRepository->save($payment);
-
-        $this->logger->info('Paiement marqué comme réussi', [
-            'payment_id' => $payment->getId()->toRfc4122(),
-            'payment_intent_id' => $paymentIntentId,
-        ]);
-
-        // Créer une facture pour ce paiement si nécessaire
-        if ($this->invoiceService) {
-            try {
-                $stripeInvoiceId = $eventData['invoice'] ?? null;
-                $this->invoiceService->createInvoiceForPayment($payment, $stripeInvoiceId);
-                $this->logger->info('Facture créée pour le paiement', [
-                    'payment_id' => $payment->getId()->toRfc4122(),
-                    'stripe_invoice_id' => $stripeInvoiceId,
-                ]);
-            } catch (\Exception $e) {
-                $this->logger->error('Erreur lors de la création de la facture pour le paiement', [
-                    'payment_id' => $payment->getId()->toRfc4122(),
-                    'error' => $e->getMessage(),
-                ]);
-            }
         }
 
         return $payment;
+    }
+
+    private function updatePaymentToSucceeded(Payment $payment, string $paymentIntentId): void
+    {
+        $payment->setStatus('succeeded');
+        $this->paymentRepository->save($payment);
+
+        $this->logger?->info('Paiement marqué comme réussi', [
+            'payment_id' => $payment->getId()->toRfc4122(),
+            'payment_intent_id' => $paymentIntentId,
+        ]);
     }
 
     /**

@@ -7,48 +7,41 @@ namespace App\Service\Invoice;
 use App\Entity\Invoice;
 use App\Entity\Payment;
 use App\Entity\Subscription;
+use App\Interface\InvoiceServiceInterface;
+use App\Interface\Stripe\StripeInvoiceServiceInterface;
 use App\Repository\InvoiceRepository;
 use App\Repository\PaymentRepository;
 use App\Repository\SubscriptionRepository;
 use Stripe\Exception\ApiErrorException;
-use Stripe\Invoice as StripeInvoice;
-use Stripe\InvoiceItem;
-use Stripe\StripeClient;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
-readonly class InvoiceService
+readonly class InvoiceService implements InvoiceServiceInterface
 {
-    private StripeClient $stripe;
-
     public function __construct(
-        #[Autowire('%env(STRIPE_SECRET_KEY)%')]
-        private string $stripeSecretKey,
         private InvoiceRepository $invoiceRepository,
         private PaymentRepository $paymentRepository,
         private SubscriptionRepository $subscriptionRepository,
-        ?StripeClient $stripeClient = null
+        private StripeInvoiceServiceInterface $stripeInvoiceService
     ) {
-        $this->stripe = $stripeClient ?? new StripeClient($this->stripeSecretKey);
     }
 
     /**
-     * Crée une facture pour un paiement ponctuel
+     * Creates an invoice for a one-time payment
      * 
-     * @param string|null $stripeInvoiceId ID de la facture Stripe si déjà créée (via webhook)
+     * @param string|null $stripeInvoiceId Stripe invoice ID if already created (via webhook)
      */
     public function createInvoiceForPayment(Payment $payment, ?string $stripeInvoiceId = null): Invoice
     {
-        // Vérifier si une facture existe déjà pour ce paiement
+        // Check if an invoice already exists for this payment
         $existingInvoice = $this->invoiceRepository->findByPayment($payment);
         if ($existingInvoice !== null) {
             return $existingInvoice;
         }
         
-        // Vérifier si une facture existe déjà avec cet ID Stripe
+        // Check if an invoice already exists with this Stripe ID
         if ($stripeInvoiceId) {
             $existingInvoiceByStripeId = $this->invoiceRepository->findOneByStripeInvoiceId($stripeInvoiceId);
             if ($existingInvoiceByStripeId !== null) {
-                // Si la facture existe mais n'est pas liée au paiement, la lier
+                // If the invoice exists but is not linked to the payment, link it
                 if ($existingInvoiceByStripeId->getPayment() === null) {
                     $existingInvoiceByStripeId->setPayment($payment);
                     $this->invoiceRepository->save($existingInvoiceByStripeId);
@@ -57,67 +50,18 @@ readonly class InvoiceService
             }
         }
 
-        // Récupérer le client Stripe ou en créer un
         $user = $payment->getUser();
-        $customerId = $user->getStripeCustomerId();
-        
-        if ($customerId === null) {
-            throw new \RuntimeException('L\'utilisateur doit avoir un customer ID Stripe pour créer une facture.');
-        }
 
         try {
-            // Vérifier que le montant est bien défini et non nul
-            if ($payment->getAmount() <= 0) {
-                throw new \RuntimeException('Le montant du paiement doit être supérieur à zéro pour créer une facture.');
-            }
-            
-            // Si un ID de facture Stripe est fourni, récupérer cette facture
+            // If a Stripe invoice ID is provided, retrieve this invoice
             if ($stripeInvoiceId) {
-                $stripeInvoice = $this->stripe->invoices->retrieve($stripeInvoiceId);
+                $stripeInvoice = $this->stripeInvoiceService->retrieveStripeInvoice($stripeInvoiceId);
             } else {
-                // Sinon, créer une nouvelle facture
-                // Créer un élément de facture dans Stripe
-                $invoiceItem = $this->stripe->invoiceItems->create([
-                    'customer' => $customerId,
-                    'amount' => $payment->getAmount(),
-                    'currency' => $payment->getCurrency(),
-                    'description' => $payment->getDescription() ?? 'Paiement ponctuel',
-                ]);
-
-                // Créer la facture dans Stripe en associant explicitement l'élément de facture
-                $stripeInvoice = $this->stripe->invoices->create([
-                    'customer' => $customerId,
-                    'auto_advance' => true, // Finaliser automatiquement la facture
-                    'collection_method' => 'charge_automatically',
-                    'pending_invoice_items_behavior' => 'include', // Important: inclure tous les éléments de facture en attente
-                    'metadata' => [
-                        'payment_id' => $payment->getId()->toRfc4122(),
-                        'description' => $payment->getDescription(),
-                        'amount' => $payment->getAmount(),
-                        'currency' => $payment->getCurrency(),
-                        'payment_method' => $payment->getPaymentType(),
-                    ],
-                ]);
-
-                // Vérifier que le montant de la facture correspond au montant du paiement
-                if ((int)$stripeInvoice->amount_due !== (int)$payment->getAmount()) {
-                    throw new \RuntimeException(sprintf(
-                        'Écart détecté entre le montant du paiement (%d) et le montant de la facture (%d)',
-                        $payment->getAmount(),
-                        $stripeInvoice->amount_due
-                    ));
-                }
-
-                // Finaliser la facture
-                $stripeInvoice = $this->stripe->invoices->finalizeInvoice($stripeInvoice->id);
-                
-                // Pour les paiements ponctuels qui ont déjà été payés, marquer la facture comme payée
-                if ($payment->getStatus() === 'succeeded' && $stripeInvoice->status !== 'paid') {
-                    $stripeInvoice = $this->stripe->invoices->pay($stripeInvoice->id, ['paid_out_of_band' => true]);
-                }
+                // Otherwise, create a new invoice via the Stripe service
+                $stripeInvoice = $this->stripeInvoiceService->createStripeInvoiceForPayment($payment);
             }
 
-            // Créer l'entité Invoice locale
+            // Create the local Invoice entity
             $invoice = new Invoice();
             $invoice->setStripeInvoiceId($stripeInvoice->id)
                 ->setUser($user)
@@ -134,29 +78,30 @@ readonly class InvoiceService
             $this->invoiceRepository->save($invoice);
 
             return $invoice;
-        } catch (ApiErrorException $e) {
-            throw new \RuntimeException('Erreur lors de la création de la facture Stripe: ' . $e->getMessage(), 0, $e);
+        } catch (\Exception $e) {
+            throw new \RuntimeException('Error creating invoice: ' . $e->getMessage(), 0, $e);
         }
     }
 
     /**
-     * Crée une facture pour un abonnement
+     * Creates an invoice for a subscription
      * 
-     * @param string|null $stripeInvoiceId ID de la facture Stripe si déjà créée (via webhook)
+     * @param string|null $stripeInvoiceId Stripe invoice ID if already created (via webhook)
      */
     public function createInvoiceForSubscription(Subscription $subscription, ?string $stripeInvoiceId = null): Invoice
     {
-        // Vérifier si une facture existe déjà pour cet abonnement
+        // On ne crée jamais de facture Stripe pour un abonnement ici.
+        // On attend que Stripe la crée et on la synchronise via le webhook.
         $existingInvoice = $this->invoiceRepository->findBySubscription($subscription);
         if ($existingInvoice !== null) {
             return $existingInvoice;
         }
         
-        // Vérifier si une facture existe déjà avec cet ID Stripe
+        // Check if an invoice already exists with this Stripe ID
         if ($stripeInvoiceId) {
             $existingInvoiceByStripeId = $this->invoiceRepository->findOneByStripeInvoiceId($stripeInvoiceId);
             if ($existingInvoiceByStripeId !== null) {
-                // Si la facture existe mais n'est pas liée à l'abonnement, la lier
+                // If the invoice exists but is not linked to the subscription, link it
                 if ($existingInvoiceByStripeId->getSubscription() === null) {
                     $existingInvoiceByStripeId->setSubscription($subscription);
                     $this->invoiceRepository->save($existingInvoiceByStripeId);
@@ -166,59 +111,22 @@ readonly class InvoiceService
         }
 
         $user = $subscription->getUser();
-        $customerId = $user->getStripeCustomerId();
-        
-        if ($customerId === null) {
-            throw new \RuntimeException('L\'utilisateur doit avoir un customer ID Stripe pour créer une facture.');
-        }
 
         try {
-            // Si un ID de facture Stripe est fourni, récupérer cette facture
+            // Si pas de stripeInvoiceId, c'est une erreur métier : la facture doit être créée par Stripe et reçue via webhook
             if ($stripeInvoiceId) {
-                $stripeInvoice = $this->stripe->invoices->retrieve($stripeInvoiceId);
+                $stripeInvoice = $this->stripeInvoiceService->retrieveStripeInvoice($stripeInvoiceId);
             } else {
-                // Sinon, créer une nouvelle facture
-                // Créer un élément de facture dans Stripe
-                $invoiceItem = $this->stripe->invoiceItems->create([
-                    'customer' => $customerId,
-                    'amount' => $subscription->getAmount(),
-                    'currency' => $subscription->getCurrency(),
-                    'description' => sprintf('Abonnement %s - %s', 
-                        $subscription->getInterval() === 'year' ? 'annuel' : 'mensuel',
-                        (new \DateTime())->format('d/m/Y')
-                    ),
-                ]);
-
-                // Créer la facture dans Stripe
-                $stripeInvoice = $this->stripe->invoices->create([
-                    'customer' => $customerId,
-                    'auto_advance' => true,
-                    'collection_method' => 'charge_automatically',
-                    'pending_invoice_items_behavior' => 'include',
-                    'metadata' => [
-                        'subscription_id' => $subscription->getId(),
-                        'stripe_subscription_id' => $subscription->getStripeSubscriptionId(),
-                        'interval' => $subscription->getInterval(),
-                        'amount' => $subscription->getAmount(),
-                        'currency' => $subscription->getCurrency(),
-                    ],
-                ]);
-
-                // Finaliser la facture
-                $stripeInvoice = $this->stripe->invoices->finalizeInvoice($stripeInvoice->id);
-                
-                if ($subscription->getStatus() === 'active') {
-                    $stripeInvoice = $this->stripe->invoices->pay($stripeInvoice->id, ['paid_out_of_band' => true]);
-                }
+                throw new \RuntimeException('La facture Stripe pour un abonnement doit être créée par Stripe et transmise via le webhook.');
             }
 
-            // Créer l'entité Invoice locale
+            // Create the local Invoice entity
             $invoice = new Invoice();
             $invoice->setStripeInvoiceId($stripeInvoice->id)
                 ->setUser($user)
                 ->setAmount($stripeInvoice->amount_paid ?: $subscription->getAmount())
                 ->setCurrency($stripeInvoice->currency ?: $subscription->getCurrency())
-                ->setDescription(sprintf('Abonnement %s', $subscription->getInterval() === 'annual' ? 'annuel' : 'mensuel'))
+                ->setDescription(sprintf('Subscription %s', $subscription->getInterval() === 'annual' ? 'annual' : 'monthly'))
                 ->setSubscription($subscription)
                 ->setStatus($stripeInvoice->status === 'paid' ? Invoice::STATUS_PAID : Invoice::STATUS_OPEN);
 
@@ -229,13 +137,13 @@ readonly class InvoiceService
             $this->invoiceRepository->save($invoice);
 
             return $invoice;
-        } catch (ApiErrorException $e) {
-            throw new \RuntimeException('Erreur lors de la création de la facture Stripe: ' . $e->getMessage(), 0, $e);
+        } catch (\Exception $e) {
+            throw new \RuntimeException('Error creating invoice: ' . $e->getMessage(), 0, $e);
         }
     }
 
     /**
-     * Met à jour le statut d'une facture en fonction du paiement associé
+     * Updates invoice status based on associated payment
      */
     public function updateInvoiceFromPayment(Payment $payment): ?Invoice
     {
@@ -255,24 +163,9 @@ readonly class InvoiceService
             $invoice->setStatus($newStatus);
             $this->invoiceRepository->save($invoice);
             
-            // Si la facture est maintenant payée et que l'on a un ID de facture Stripe
+            // If the invoice is now paid and we have a Stripe invoice ID
             if ($newStatus === Invoice::STATUS_PAID && $invoice->getStripeInvoiceId()) {
-                try {
-                    $stripeInvoice = $this->stripe->invoices->retrieve($invoice->getStripeInvoiceId());
-                    
-                    // Si la facture n'est pas déjà marquée comme payée dans Stripe
-                    if ($stripeInvoice->status !== 'paid') {
-                        $stripeInvoice = $this->stripe->invoices->pay($stripeInvoice->id, ['paid_out_of_band' => true]);
-                    }
-                    
-                    // Mettre à jour l'URL du PDF s'il est disponible
-                    if ($stripeInvoice->invoice_pdf && $invoice->getPdfUrl() !== $stripeInvoice->invoice_pdf) {
-                        $invoice->setPdfUrl($stripeInvoice->invoice_pdf);
-                        $this->invoiceRepository->save($invoice);
-                    }
-                } catch (ApiErrorException $e) {
-                    // Log l'erreur mais ne pas arrêter le processus
-                }
+                $this->syncWithStripeInvoice($invoice);
             }
         }
 
@@ -280,7 +173,7 @@ readonly class InvoiceService
     }
 
     /**
-     * Met à jour le statut d'une facture en fonction de l'abonnement associé
+     * Updates invoice status based on associated subscription
      */
     public function updateInvoiceFromSubscription(Subscription $subscription): ?Invoice
     {
@@ -301,24 +194,9 @@ readonly class InvoiceService
             $invoice->setStatus($newStatus);
             $this->invoiceRepository->save($invoice);
             
-            // Si la facture est maintenant payée et que l'on a un ID de facture Stripe
+            // If the invoice is now paid and we have a Stripe invoice ID
             if ($newStatus === Invoice::STATUS_PAID && $invoice->getStripeInvoiceId()) {
-                try {
-                    $stripeInvoice = $this->stripe->invoices->retrieve($invoice->getStripeInvoiceId());
-                    
-                    // Si la facture n'est pas déjà marquée comme payée dans Stripe
-                    if ($stripeInvoice->status !== 'paid') {
-                        $stripeInvoice = $this->stripe->invoices->pay($stripeInvoice->id, ['paid_out_of_band' => true]);
-                    }
-                    
-                    // Mettre à jour l'URL du PDF s'il est disponible
-                    if ($stripeInvoice->invoice_pdf && $invoice->getPdfUrl() !== $stripeInvoice->invoice_pdf) {
-                        $invoice->setPdfUrl($stripeInvoice->invoice_pdf);
-                        $this->invoiceRepository->save($invoice);
-                    }
-                } catch (ApiErrorException $e) {
-                    // Log l'erreur mais ne pas arrêter le processus
-                }
+                $this->syncWithStripeInvoice($invoice);
             }
         }
 
@@ -326,7 +204,7 @@ readonly class InvoiceService
     }
 
     /**
-     * Traite les webhooks liés aux factures
+     * Processes invoice-related webhooks
      * @param array<string, mixed> $eventData
      */
     public function handleInvoiceWebhook(string $eventType, array $eventData): bool
@@ -340,15 +218,15 @@ readonly class InvoiceService
             return false;
         }
 
-        // Vérifier si cette facture existe déjà dans notre système
+        // Check if this invoice already exists in our system
         $invoice = $this->invoiceRepository->findOneByStripeInvoiceId($invoiceId);
 
-        // Pour les événements de facture liés à un abonnement
+        // For invoice events related to a subscription
         if ($subscriptionId && is_string($subscriptionId)) {
             $subscription = $this->subscriptionRepository->findOneByStripeSubscriptionId($subscriptionId);
             
             if ($subscription) {
-                // Si la facture existe déjà, mettre à jour son statut
+                // If the invoice already exists, update its status
                 if ($invoice) {
                     $invoice->setStatus(match ($eventType) {
                         'invoice.payment_succeeded' => Invoice::STATUS_PAID,
@@ -357,7 +235,7 @@ readonly class InvoiceService
                     });
                     $this->invoiceRepository->save($invoice);
                 } else {
-                    // Sinon, créer une nouvelle facture pour cet abonnement
+                    // Otherwise, create a new invoice for this subscription
                     try {
                         $invoice = $this->createInvoiceForSubscription($subscription, $invoiceId);
                     } catch (\Exception $e) {
@@ -368,12 +246,12 @@ readonly class InvoiceService
             }
         }
         
-        // Pour les événements de facture liés à un paiement
+        // For invoice events related to a payment
         if ($paymentIntentId && is_string($paymentIntentId)) {
             $payment = $this->paymentRepository->findOneByPaymentIntentId($paymentIntentId);
             
             if ($payment) {
-                // Si la facture existe déjà, mettre à jour son statut
+                // If the invoice already exists, update its status
                 if ($invoice) {
                     $invoice->setStatus(match ($eventType) {
                         'invoice.payment_succeeded' => Invoice::STATUS_PAID,
@@ -382,7 +260,7 @@ readonly class InvoiceService
                     });
                     $this->invoiceRepository->save($invoice);
                 } else {
-                    // Sinon, créer une nouvelle facture pour ce paiement
+                    // Otherwise, create a new invoice for this payment
                     try {
                         $invoice = $this->createInvoiceForPayment($payment, $invoiceId);
                     } catch (\Exception $e) {
@@ -393,8 +271,8 @@ readonly class InvoiceService
             }
         }
         
-        // Si aucun paiement ou abonnement trouvé, créer une facture virtuelle en attente
-        // qui sera liée ultérieurement à un paiement ou abonnement
+        // If no payment or subscription found, create a pending virtual invoice
+        // that will be linked later to a payment or subscription
         if (!$invoice && $customerId) {
             $invoice = new Invoice();
             $invoice->setStripeInvoiceId($invoiceId)
@@ -404,7 +282,7 @@ readonly class InvoiceService
                     default => Invoice::STATUS_OPEN
                 });
                 
-            // Extraire d'autres informations de la facture
+            // Extract other invoice information
             if (isset($eventData['amount_paid'])) {
                 $invoice->setAmount((int) $eventData['amount_paid']);
             }
@@ -418,5 +296,28 @@ readonly class InvoiceService
         }
         
         return false;
+    }
+
+    /**
+     * Synchronizes a local invoice with Stripe
+     */
+    private function syncWithStripeInvoice(Invoice $invoice): void
+    {
+        try {
+            $stripeInvoice = $this->stripeInvoiceService->retrieveStripeInvoice($invoice->getStripeInvoiceId());
+            
+            // If the invoice is not already marked as paid in Stripe
+            if ($stripeInvoice->status !== 'paid') {
+                $stripeInvoice = $this->stripeInvoiceService->markStripeInvoiceAsPaid($invoice->getStripeInvoiceId());
+            }
+            
+            // Update the PDF URL if available
+            if ($stripeInvoice->invoice_pdf && $invoice->getPdfUrl() !== $stripeInvoice->invoice_pdf) {
+                $invoice->setPdfUrl($stripeInvoice->invoice_pdf);
+                $this->invoiceRepository->save($invoice);
+            }
+        } catch (\Exception $e) {
+            // Log the error but don't stop the process
+        }
     }
 }

@@ -51,8 +51,48 @@ services:
         arguments:
             $cache: '@cache.app'
             
+    # Configuration des nouveaux services refactorisés
+    App\Service\Stripe\StripeInvoiceService:
+        autowire: true
+        
+    App\Service\Webhook\WebhookLoggerService:
+        autowire: true
+        
+    App\Service\Webhook\SubscriptionCreationService:
+        autowire: true
+        
+    App\Service\Webhook\WebhookRetryService:
+        autowire: true
+        
+    App\Service\Webhook\WebhookStatusService:
+        autowire: true
+        
+    App\Service\Admin\AdminService:
+        autowire: true
+            
     # Alias pour NotifierInterface (utilisé par AuthService)
     App\Interface\NotifierInterface: '@App\Service\Notifier\EmailNotifier'
+    
+    # Alias pour AuthOptionsInterface
+    App\Interface\Auth\AuthOptionsInterface: '@App\Service\Auth\AuthOptionsService'
+    
+    # Alias pour WebhookProcessorInterface
+    App\Interface\WebhookProcessorInterface: '@App\Service\Webhook\WebhookProcessor'
+    
+    # Alias pour StripeInvoiceServiceInterface
+    App\Interface\Stripe\StripeInvoiceServiceInterface: '@App\Service\Stripe\StripeInvoiceService'
+    
+    # Configuration du Controller AuthController avec les services refactorisés
+    App\Controller\Api\Public\AuthController:
+        arguments:
+            $authInterface: '@App\Service\Auth\AuthService'
+            $em: '@doctrine.orm.entity_manager'
+            
+    # Configuration du Controller PaymentController avec les services refactorisés
+    App\Controller\Api\Public\PaymentController:
+        arguments:
+            $paymentServiceFactory: '@App\Service\Payment\PaymentServiceFactory'
+            $stripeService: '@App\Service\Stripe\StripeService'
 
     # Discord Logger Factory - injection directe des webhooks
     App\Logger\DiscordHandlerFactory:

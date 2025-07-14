@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Interface;
+namespace App\Interface\Auth;
 
 use App\DTO\Auth\LoginRequest;
 

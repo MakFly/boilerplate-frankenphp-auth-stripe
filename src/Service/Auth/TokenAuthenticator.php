@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace App\Service\Auth;
 
 use App\Entity\User;
+use App\Interface\Auth\TokenAuthenticatorInterface;
 use App\Repository\SubscriptionRepository;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
-final class TokenAuthenticator
+final class TokenAuthenticator implements TokenAuthenticatorInterface
 {
     public function __construct(
         private readonly JWTTokenManagerInterface $jwtTokenManager,
@@ -18,9 +19,9 @@ final class TokenAuthenticator
     ) {}
 
     /**
-     * Créer un token JWT pour un utilisateur
+     * Create a JWT token for a user
      *
-     * @param User $user L'utilisateur pour lequel créer le token
+     * @param User $user The user for whom to create the token
      * @return array{userId: string, token: string, token_expires_in: int}
      */
     public function createAuthenticationToken(User $user): array
@@ -38,11 +39,11 @@ final class TokenAuthenticator
     }
 
     /**
-     * Vérifie si un token JWT est valide
+     * Verifies if a JWT token is valid
      *
-     * @param string $token Le token JWT à vérifier
+     * @param string $token The JWT token to verify
      * @return array{userId: string, username: string, role: string}
-     * @throws \Exception Si le token est invalide
+     * @throws \Exception If the token is invalid
      */
     public function verifyJwt(string $token): array
     {

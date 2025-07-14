@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Controller\Api\Admin;
 
 use App\DTO\Response\ApiResponse;
-use App\Repository\UserRepository;
+use App\Service\Admin\AdminService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -15,7 +15,7 @@ use Symfony\Component\Serializer\SerializerInterface;
 final class AdminController extends AbstractController
 {
     public function __construct(
-        private readonly UserRepository $userRepository,
+        private readonly AdminService $adminService,
         private readonly SerializerInterface $serializer,
     ) {
     }
@@ -23,7 +23,7 @@ final class AdminController extends AbstractController
     #[Route('/users', name: 'list_users', methods: ['GET'])]
     public function listUsers(): Response
     {
-        $users = $this->userRepository->findAll();
+        $users = $this->adminService->getAllUsers();
         
         return ApiResponse::success([
             'users' => $this->serializer->serialize($users, 'json', ['groups' => ['user:read']])
@@ -33,16 +33,10 @@ final class AdminController extends AbstractController
     #[Route('/users/{id}/promote', name: 'promote_user', methods: ['POST'])]
     public function promoteUser(string $id): Response
     {
-        $user = $this->userRepository->find($id);
-        if (!$user) {
+        $success = $this->adminService->promoteUserToAdmin($id);
+        
+        if (!$success) {
             return ApiResponse::notFound();
-        }
-
-        // Ajout du rôle admin
-        $roles = $user->getRoles();
-        if (!in_array('ROLE_ADMIN', $roles)) {
-            $user->setRoles(array_merge($roles, ['ROLE_ADMIN']));
-            $this->userRepository->save($user, true);
         }
 
         return ApiResponse::success(['message' => 'User promoted successfully']);
@@ -51,15 +45,11 @@ final class AdminController extends AbstractController
     #[Route('/users/{id}/demote', name: 'demote_user', methods: ['POST'])]
     public function demoteUser(string $id): Response
     {
-        $user = $this->userRepository->find($id);
-        if (!$user) {
+        $success = $this->adminService->demoteUserFromAdmin($id);
+        
+        if (!$success) {
             return ApiResponse::notFound();
         }
-
-        // Suppression du rôle admin
-        $roles = array_diff($user->getRoles(), ['ROLE_ADMIN']);
-        $user->setRoles($roles);
-        $this->userRepository->save($user, true);
 
         return ApiResponse::success(['message' => 'User demoted successfully']);
     }
